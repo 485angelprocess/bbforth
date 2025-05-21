@@ -25,12 +25,20 @@ pub enum Mode{
     COMPILE
 }
 
+pub enum EditorStyle{
+    PRIM,
+    DEFINED,
+    LITERAL,
+    SYS,
+    ERROR
+}
+
 #[derive(Clone)]
-struct Word{
+struct Routine{
     pub contents: Vec<(usize, BaseType)>
 }
 
-impl Word{
+impl Routine{
     pub fn new(op: usize, v:BaseType) -> Self{
         Self{
             contents: vec![(op, v)]
@@ -41,15 +49,15 @@ impl Word{
     }
 }
 
-pub struct Context{
+pub struct Interpreter{
     data_stack: Vec<BaseType>,
     
     dict: HashMap<String, usize>,
     prim: HashMap<usize, PRIM>,
-    words: HashMap<usize, Word>,
+    words: HashMap<usize, Routine>,
     
     active_word: Option<String>,
-    active_contents: Option<Word>,
+    active_contents: Option<Routine>,
     
     mode: Mode,
     op: usize,
@@ -58,7 +66,7 @@ pub struct Context{
     pub sys_buffer: Vec<BaseType>
 }
 
-impl Context{
+impl Interpreter{
     pub fn new() -> Self{
         let mut ctx = Self{
             data_stack: Vec::new(),
@@ -116,11 +124,14 @@ impl Context{
     }
     
     fn start_definition(&mut self){
+        println!("Starting definition");
         self.mode = Mode::DEFINE;
     }
     
     fn end_definition(&mut self){
         // a few steps
+        println!("Ending definition");
+        
         self.mode = Mode::STANDARD;
         
         // register word
@@ -173,7 +184,7 @@ impl Context{
                                 c.push(op, v);
                             }
                             else{
-                                self.active_contents = Some(Word::new(op, v));
+                                self.active_contents = Some(Routine::new(op, v));
                             }
                         }
                     }
@@ -201,7 +212,44 @@ impl Context{
         
     }
             
-    fn get_op(&mut self, msg: &String) -> (usize, i32){
+    pub fn get_style(&self, msg: &String) -> EditorStyle{
+        let op = self.get_op_safe(msg);
+        if op == self.sys{
+            EditorStyle::SYS
+        }
+        else if op == self.lit {
+            if msg.trim().parse::<BaseType>().is_ok(){
+                EditorStyle::LITERAL   
+            }
+            else{
+                EditorStyle::ERROR
+            }
+        }
+        else if self.prim.contains_key(&op){
+            EditorStyle::PRIM
+        }
+        else if self.words.contains_key(&op){
+            EditorStyle::DEFINED
+        }
+        else{
+            EditorStyle::ERROR
+        }
+    }
+            
+    fn get_op_safe(&self, msg: &String) -> usize{
+        if msg.starts_with("."){
+            // System call/special functions
+            return self.sys;
+        }
+        if self.dict.contains_key(msg){
+            // in dictionary of words
+            return self.dict[msg];
+        }
+        // assume it is literal
+        self.lit
+    }
+            
+    fn get_op(&self, msg: &String) -> (usize, i32){
         
         if msg.starts_with("."){
             // System call/special functions
@@ -296,19 +344,23 @@ impl Context{
     }
 }
 
-pub fn run_program(program: &str, ctx: &mut Context){
-    for p in program.split(" "){
-        ctx.parse(&p.to_string());
+pub fn run_program(program: &str, ctx: &mut Interpreter){
+    println!("Program: {}", program);
+    for p in program.split_whitespace(){
+        println!("Parsing {}", p);
+        if !p.is_empty(){
+            ctx.parse(&p.to_string());
+        }
     }
 }
 
 #[cfg(test)]
 mod tests{
-    use super::{run_program, Context};
+    use super::{run_program, Interpreter};
 
     #[test]
     fn dup(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("5 dup . .", &mut ctx);
         assert!(ctx.sys_buffer.pop().unwrap() == 5);
         assert!(ctx.sys_buffer.pop().unwrap() == 5);
@@ -316,7 +368,7 @@ mod tests{
     
     #[test]
     fn literal(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("1 2 3 . . .", &mut ctx);
         assert!(ctx.sys_buffer[0] == 3);
         assert!(ctx.sys_buffer[1] == 2);
@@ -326,20 +378,20 @@ mod tests{
     #[test]
     #[should_panic]
     fn dup_requires_argument(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("dup .", &mut ctx);
     }
     
     #[test]
     #[should_panic]
     fn undefined_word(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("newword", &mut ctx);
     }
     
     #[test]
     fn ltz(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("-1 ltz .", &mut ctx);
         assert!(ctx.sys_buffer.pop().unwrap() == 1);
         
@@ -352,7 +404,7 @@ mod tests{
     
     #[test]
     fn new_word(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         
         // new word
         run_program(": square dup * ;", &mut ctx);
@@ -366,14 +418,14 @@ mod tests{
     #[test]
     #[should_panic]
     fn new_word_no_body(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         
         run_program(": square ;", &mut ctx);
     }
     
     #[test]
     fn rot(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("1 2 3 rot . . .", &mut ctx);
         assert!(ctx.sys_buffer[0] == 1);
         assert!(ctx.sys_buffer[1] == 3);
@@ -382,7 +434,7 @@ mod tests{
     
     #[test]
     fn swap(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("1 2 swap . .", &mut ctx);
         assert!(ctx.sys_buffer[0] == 1);
         assert!(ctx.sys_buffer[1] == 2);
@@ -390,21 +442,21 @@ mod tests{
     
     #[test]
     fn add(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("3 4 + .", &mut ctx);
         assert!(ctx.sys_buffer.pop().unwrap() == 7);
     }
     
     #[test]
     fn drop(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("4 3 drop .", &mut ctx);
         assert!(ctx.sys_buffer.pop().unwrap() == 4);
     }
     
     #[test]
     fn pick(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("5 0 pick . .", &mut ctx);
         assert!(ctx.sys_buffer[0] == 5);
         assert!(ctx.sys_buffer[1] == 5);
@@ -419,7 +471,7 @@ mod tests{
     #[test]
     #[should_panic]
     fn pick_with_no_stack(){
-        let mut ctx = Context::new();
+        let mut ctx = Interpreter::new();
         run_program("5 2 pick", &mut ctx);
     }
 }
