@@ -24,4 +24,4 @@ run_program(": square dup * ;", &mut ctx); // define square
 run_program("5 square .", &mut ctx); // use word 
 ```
 
-This program also print 25.
+This program also prints 25.
