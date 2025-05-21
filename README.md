@@ -8,7 +8,7 @@ Basic square
 ```rust
 let mut ctx = Context::new();
 
-let program = "5 dup *" // push 5 to stack, duplicate, multiply and print top of stack
+let program = "5 dup * ." // push 5 to stack, duplicate, multiply and print top of stack
 
 run_program(program, &mut ctx);
 ```
