@@ -25,3 +25,9 @@ run_program("5 square .", &mut ctx); // use word
 ```
 
 This program also prints 25.
+
+## Editor
+
+I added a very simple editor with color highlighting.
+
+![Screenshot 2025-05-21 125712](https://github.com/user-attachments/assets/0fda1884-bddf-4c60-a3e8-eb1e6a55817d)
