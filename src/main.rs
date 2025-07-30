@@ -1,33 +1,52 @@
-mod forth;
-mod editor;
+extern crate rustyline;
 
-use eframe::egui::{Style, Visuals};
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 
-use editor::Editor;
+mod reader;
+mod types;
+mod context;
+mod math;
 
-use eframe;
-use egui;
-
-fn main() -> eframe::Result{
+fn main(){
+    println!("__welcome__");
     
-    //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
-        ..Default::default()
-    };
-    eframe::run_native(
-        "bbforth interpreter",
-        options,
-        Box::new(|cc| {
-            
-            let style = Style {
-                visuals: Visuals::dark(),
-                ..Style::default()
-            };
-            cc.egui_ctx.set_style(style);
-            
-            Ok(Box::<Editor>::default())
-        }),
-    )
+    let mut rl = Editor::<(), rustyline::history::DefaultHistory>::new().unwrap();
     
+    if rl.load_history(".bee-history").is_err(){
+        eprintln!("No history");
+    }
+    
+    // Set up environment
+    let mut ctx = context::Workspace::new();
+    
+    ctx.setup();
+    
+    // Main loop
+    loop{
+        let readline =rl.readline("> ");
+        match readline{
+            Ok(line) => {
+                if !line.is_empty(){
+                    // Add line to history
+                    let _ = rl.add_history_entry(&line);
+                    rl.save_history(".bee-history").unwrap();
+                    
+                    // Do operations on input
+                    if let Ok(reply) = ctx.read(line.as_str()){
+                        for r in reply{
+                            print!("{} ", r);
+                        }
+                        print!("\n");
+                    }
+                }
+            },
+            Err(ReadlineError::Interrupted) => continue,
+            Err(ReadlineError::Eof) => break,
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break;
+            }
+        }
+    }
 }
