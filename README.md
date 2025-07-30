@@ -1,33 +1,15 @@
 # bbforth
 
 Small forth interpreter implemented in rust. Supports a small dictionary of built in words, and new words can be defined. 
-Based on zforth.
+Based on zforth, as well as Charle Moore's book on problem-based programming.
 
-Basic square
+## Running
 
-```rust
-let mut ctx = Context::new();
+Runs in terminal as an interactive prompt. Example:
 
-let program = "5 dup * ." // push 5 to stack, duplicate, multiply and print top of stack
-
-run_program(program, &mut ctx);
+```
+> 5 3 + .
+8
 ```
 
-This program prints 25
-
-Defining a word:
-
-```rust
-let mut ctx = Context::new();
-
-run_program(": square dup * ;", &mut ctx); // define square
-run_program("5 square .", &mut ctx); // use word 
-```
-
-This program also prints 25.
-
-## Editor
-
-I added a very simple editor with color highlighting.
-
-![Screenshot 2025-05-21 125712](https://github.com/user-attachments/assets/0fda1884-bddf-4c60-a3e8-eb1e6a55817d)
+The dictionary is compiled at run time. I'm putting together a standard library, but the goal is to be able to use the same framework for multiple hardware/software targets. A small number of types with a extensible dictionary should make this possible.
