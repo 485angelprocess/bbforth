@@ -1,5 +1,8 @@
+use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::rc::Rc;
 
+use crate::generator::*;
 use crate::math;
 use crate::reader::{self, ForthReader};
 use crate::types::{ForthErr, ForthVal};
@@ -8,7 +11,7 @@ use crate::types::{ForthErr, ForthVal};
 pub type ForthFn = fn(&mut WorkspaceContext) -> ForthVal;
 pub type ForthFnGen = Box<dyn Fn(&mut WorkspaceContext) -> ForthVal>;
 
-enum ForthRoutine{
+pub enum ForthRoutine{
     Prim(ForthFnGen),
     Compiled(Vec<ForthVal>)
 }
@@ -18,6 +21,16 @@ fn dup(ws: &mut WorkspaceContext) -> ForthVal{
     let t = ws.last().unwrap();
     ws.push(t.clone());
     ForthVal::Null
+}
+
+fn generator<T: Generator + Default + 'static>(ws: &mut WorkspaceContext) -> ForthVal{
+    let mut gu = GeneratorUnit{
+        env: GenEnv::default(),
+        gen: Rc::new(T::default()),
+        trace: Vec::new()
+    };
+    gu.consume(ws);
+    ForthVal::Generator(gu)
 }
 
 /// Start definition
@@ -42,11 +55,6 @@ fn end_define(ws: &mut WorkspaceContext) -> ForthVal{
     }
 }
 
-/// Binary arithemtic operation
-//fn binary_arithmetic(a: ForthVal, b: ForthVal) -> ForthVal{
-    
-//}
-
 #[derive(PartialEq)]
 enum Mode{
     NORMAL,
@@ -56,7 +64,7 @@ enum Mode{
 
 pub struct WorkspaceContext{
     pub stack: Vec<ForthVal>,
-    pub reply: Vec<String>,
+    pub reply: Vec<ForthVal>,
     
     pub mode: Mode,
     
@@ -103,9 +111,9 @@ impl WorkspaceContext{
 
 /// Forth workspace context
 pub struct Workspace{
-    ctx: WorkspaceContext,
+    pub ctx: WorkspaceContext,
     pub lookup: HashMap<String, usize>,
-    pub library: HashMap<usize, ForthRoutine>
+    pub library: HashMap<usize, ForthRoutine>,
 }
 
 impl Workspace{
@@ -138,13 +146,24 @@ impl Workspace{
         id
     }
     
+    fn insert_generator<T: Generator + Default + 'static>(&mut self, s: &str){
+        let id = self.lookup.len();
+        self.lookup.insert(s.to_string(), id);
+        
+        self.library.insert(id,
+                ForthRoutine::Prim(Box::new(|ws| generator::<T>(ws)))
+        );
+    }
+    
     pub fn standard() -> Self{
         let mut s = Self::new();
         s.setup();
         s
     }
     
+    /// Declare primitive functions
     pub fn setup(&mut self){
+        // Stack operations
         self.insert(
             "dup",
             dup
@@ -157,66 +176,87 @@ impl Workspace{
             }
         );
         
+        // Binary operations
         // TODO surely there is some easy way to compress these
         self.insert_box("+", math::binary_op(|a, b|{b+a}, |a, b|{b+a}));
         self.insert_box("-", math::binary_op(|a, b|{b-a}, |a, b|{b-a}));
         self.insert_box("*", math::binary_op(|a, b|{b*a}, |a, b|{b*a}));
         self.insert_box("/", math::binary_op(|a, b|{b/a}, |a, b|{b/a}));
         
+        // Dictionary operations
         self.insert(":",start_define);
+        // Semicolon is actualyl handled special, because it it gets close to touching
+        // function pointers
         self.insert(";", end_define);
+        
+        // Basic generators
+        self.insert_generator::<Natural>("natural");
+    }
+    
+    fn interpret_token(&mut self, v: &ForthVal) -> Result<(), ForthErr>{
+        match self.ctx.mode{
+            Mode::NORMAL => self.run(v),
+            Mode::DECLARE => {
+                // Set new word definition
+                self.ctx.definition.clear();
+                
+                match v{
+                    ForthVal::Sym(s) => {
+                        self.ctx.define_word = Some(s.clone());
+                    }
+                    _ => {
+                        return Err(ForthErr::ErrString(
+                            format!("Invalid definition token {}", v.to_string()
+                        )))
+                    }
+                }
+                
+                self.ctx.mode = Mode::COMPILE;
+            }
+            Mode::COMPILE => {
+                match v{
+                    ForthVal::Sym(s) => {
+                        if *s == ";".to_string(){
+                            // End definition
+                            let id = self.lookup.len();
+                            self.lookup.insert(self.ctx.define_word.clone().unwrap().clone(), id);
+                            self.library.insert(id, ForthRoutine::Compiled(
+                                self.ctx.definition.clone()
+                            ));
+                            self.ctx.definition.clear();
+                            self.ctx.mode = Mode::NORMAL;
+                        }
+                        else{
+                            // TODO add arguments
+                            let id = self.lookup[s];
+                            // TODO push things like ints
+                            self.ctx.definition.push(ForthVal::Func(id));
+                        }
+                    },
+                    _ => {
+                        return Err(ForthErr::ErrString(
+                            format!("Invalid compiled token {}", v.to_string())
+                        ))
+                    }
+                }
+            }
+        };
+        Ok(())
     }
     
     /// Read line from interpreter
-    pub fn read(&mut self, s: &str) -> Result<Vec<String>, ForthErr>{
+    pub fn read(&mut self, s: &str) -> Result<Vec<ForthVal>, ForthErr>{
         let mut reader = reader::ForthReader::from_line(s);
         self.ctx.reply.clear();
-        while let Ok(v) = reader.next(){
-            match self.ctx.mode{
-                Mode::NORMAL => self.run(&v),
-                Mode::DECLARE => {
-                    // Set new word definition
-                    self.ctx.definition.clear();
-                    
-                    match v{
-                        ForthVal::Sym(s) => {
-                            self.ctx.define_word = Some(s.clone());
-                        }
-                        _ => {
-                            return Err(ForthErr::ErrString(
-                                format!("Invalid definition token {}", v.to_string()
-                            )))
-                        }
-                    }
-                    
-                    self.ctx.mode = Mode::COMPILE;
-                }
-                Mode::COMPILE => {
-                    match v{
-                        ForthVal::Sym(s) => {
-                            if s == ";".to_string(){
-                                // End definition
-                                let id = self.lookup.len();
-                                self.lookup.insert(self.ctx.define_word.clone().unwrap().clone(), id);
-                                self.library.insert(id, ForthRoutine::Compiled(
-                                    self.ctx.definition.clone()
-                                ));
-                                self.ctx.definition.clear();
-                                self.ctx.mode = Mode::NORMAL;
-                            }
-                            else{
-                                // TODO add arguments
-                                let id = self.lookup[&s];
-                                // TODO push things like ints
-                                self.ctx.definition.push(ForthVal::Func(id));
-                            }
-                        },
-                        _ => {
-                            return Err(ForthErr::ErrString(
-                                format!("Invalid compiled token {}", v.to_string())
-                            ))
-                        }
-                    }
+        while !reader.is_done(){
+            let token = reader.next();
+            match token{
+                Ok(v) => {
+                    self.interpret_token(&v);
+                },
+                Err(err) => {
+                    println!("Error {:#?}", err);
+                    return Err(err)
                 }
             }
         }
@@ -224,31 +264,25 @@ impl Workspace{
     }
     
     /// Read things from a forth line
-    fn run(&mut self, val: &ForthVal){
+    pub fn run(&mut self, val: &ForthVal){
         // TODO make this reply more detailed
         // with like character positions
         match val{
-            ForthVal::Int(v) => {
-                self.ctx.push(ForthVal::Int(*v));
-            },
-            ForthVal::Float(v) =>{
-                self.ctx.push(ForthVal::Float(*v))
-            },
             ForthVal::Sys(s) => {
                 // system call
                 match s.as_str(){
                     // TODO decide/check if this clears stack
                     "" => {
                         if let Some(v) = self.ctx.pop(){
-                            self.ctx.reply.push(v.to_string());
+                            self.ctx.reply.push(v);
                         }
                         else{
-                            self.ctx.reply.push("Stack empty".to_string());
+                            self.ctx.reply.push(ForthVal::Str("Stack empty".to_string()));
                         }
                     },
                     "s" => {
                         while let Some(v) = self.ctx.pop(){
-                            self.ctx.reply.push(v.to_string());
+                            self.ctx.reply.push(v);
                         }  
                     },
                     _ => {
@@ -298,14 +332,44 @@ impl Workspace{
                         }
                     }
                 }
+            },
+            ForthVal::Meta(m) =>{
+                if let Some(id) = self.lookup.get(m){
+                    match &self.library[id]{
+                        ForthRoutine::Prim(_f) => {
+                            self.ctx.reply.push(ForthVal::Str(format!("Builtin function {}", m)));
+                        },
+                        ForthRoutine::Compiled(_p) => {
+                            self.ctx.reply.push(ForthVal::Str(format!("User functoin {}", m)));
+                        }
+                    }
+                }
+                else{
+                    self.ctx.reply.push(ForthVal::Str(format!("Unknown element {}", m)));
+                }
+                self.ctx.push(val.clone());
+            },
+            ForthVal::Callable(m) => {
+                match m.borrow(){
+                    ForthRoutine::Prim(f) => {
+                        let result = f(&mut self.ctx);
+                        match result{
+                            ForthVal::Null => (),
+                            _ => self.ctx.push(result)
+                        }
+                    }
+                    _ => panic!("Can't infer a compiled function from a callable")
+                }
             }
-            _ => todo!("Unimplemented type: {}", val.to_string())
+            _ => self.ctx.push(val.clone())
         }
     }
 }
 
 #[cfg(test)]
 mod tests{
+    use crate::types::ForthVal;
+
     use super::Workspace;
     
     // Arithmetic
@@ -313,35 +377,35 @@ mod tests{
     fn add_int(){
         let mut ws = Workspace::standard();
         let result = ws.read("1 2 + .").expect("Response");
-        assert_eq!(result[0], "3");
+        assert_eq!(result[0].to_int().unwrap(), 3);
     }
     
     #[test]
     fn sub_int(){
         let mut ws = Workspace::standard();
         let result = ws.read("3 5 - .").expect("Response");
-        assert_eq!(result[0], "-2");
+        assert_eq!(result[0].to_int().unwrap(), -2);
     }
     
     #[test]
     fn mul_int(){
         let mut ws = Workspace::standard();
         let result = ws.read("3 4 * .").expect("Response");
-        assert_eq!(result[0], "12");
+        assert_eq!(result[0].to_int().unwrap(), 12);
     }
     
     #[test]
     fn div_int(){
         let mut ws = Workspace::standard();
         let result = ws.read("10 5 / .").expect("Response");
-        assert_eq!(result[0], "2");
+        assert_eq!(result[0].to_int().unwrap(), 2);
     }
     
     #[test]
     fn add_float(){
         let mut ws = Workspace::standard();
         let result = ws.read("2.2 1.5 + .").expect("Response");
-        assert_eq!(result[0], "3.7");
+        assert_eq!(result[0].to_float().unwrap(), 3.7);
     }
     
     #[test]
@@ -349,6 +413,20 @@ mod tests{
         let mut ws = Workspace::standard();
         let _ = ws.read(": square dup * ;").expect("Response");
         let result = ws.read("5 square .").expect("Response");
-        assert_eq!(result[0], "25");
+        assert_eq!(result[0].to_int().unwrap(), 25);
+    }
+    
+    #[test]
+    fn list_add(){
+        let mut ws = Workspace::standard();
+        let result = ws.read("[1 2] 3 + .").expect("Response");
+        match &result[0]{
+            ForthVal::List(l) => {
+                assert_eq!(l[0].to_int().unwrap(), 4);
+                assert_eq!(l[1].to_int().unwrap(), 5);
+                assert_eq!(l.len(), 2);
+            },
+            _ => panic!("Unexpected return {}", result[0].to_string())
+        }
     }
 }

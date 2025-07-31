@@ -7,6 +7,7 @@ mod reader;
 mod types;
 mod context;
 mod math;
+mod generator;
 
 fn main(){
     println!("__welcome__");
@@ -35,12 +36,12 @@ fn main(){
                     // Do operations on input
                     if let Ok(reply) = ctx.read(line.as_str()){
                         for r in reply{
-                            print!("{} ", r);
+                            print!("{} ", r.to_string());
                         }
                         print!("\n");
                     }
                 }
-            },
+            }
             Err(ReadlineError::Interrupted) => continue,
             Err(ReadlineError::Eof) => break,
             Err(err) => {

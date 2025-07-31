@@ -1,16 +1,4 @@
 #V2
-a
-b
-a
-a b
-abcd def
-1 2 3
-f
-jkl
-bop ohp
-ab 
-asd bad
-a
 sg
 .asdf
 .s
@@ -47,3 +35,67 @@ clear
 1 2 + .
 1 2 - .
 3 5 + .
+[1 2]
+1 2 + .
+[1 2]
+[1 2] 
+[1 2]
+.
+[1 2]
+.
+[1 2] .
+1 .
+[1 2]
+.
+[1 2] 3 +
+.
+[1] + .
+[1 2] 5 - .
+[1 2] 5 -
+.
+clear
+[1 2] 5 + .
+clear
+4 [1 2] + .
+4 + .
+`+
+.
+5 4 + .
+wave
+1 2 wave
+.
+1 2 wave
+.
+1 2 wave
+.
+1 2 wave .
+1 2 wave
+.
+1 2 wave
+.
+1 2 wave
+.
+"abc"
+.
+"abc"
+.
+"abc" .
+1 (120 5 wave) +
+5 120 5 wave +
+5 120 10 wave +
+.
+5 120 1 wave +
+.
+5 120 10 wave + .
+10 1 120 wave + .
+5 120 3 wave + .
+120 10 wave .
+clear
+5 120 10 wave + .
+6 120 10 wave + .
+5 120 10 wave + .
+120 10 wave
+5 + .
+natural
+.
+natural 5 + .
