@@ -14,7 +14,32 @@ Runs in terminal as an interactive prompt. Example:
 
 The dictionary is compiled at run time. I'm putting together a standard library, but the goal is to be able to use the same framework for multiple hardware/software targets. A small number of types with a extensible dictionary should make this possible.
 
-## Lazy Lists
+## Lists
+
+List data types can be containers of other data, such as ints or floats. There may be some way to implement better vector math, but currently are done pretty naively.
+
+Push list to stack
+
+```
+> [1 2 3] .
+[1 2 3]
+```
+
+Operation on a list with an int
+
+```
+> [1 2 3] 5 + .
+[6 7 8]
+```
+
+Operation between lists
+
+```
+> [1 2 3] [4 5 6] + .
+[5 7 9]
+```
+
+## Lazy Lists/Generators
 
 Adding in support for lazy lists as data types. The basic support can be done by adding the natural numbers to the the stack.
 
