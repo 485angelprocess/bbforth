@@ -9,6 +9,8 @@ mod context;
 mod math;
 mod generator;
 
+use types::ForthErr;
+
 fn main(){
     println!("__welcome__");
     
@@ -34,11 +36,26 @@ fn main(){
                     rl.save_history(".bee-history").unwrap();
                     
                     // Do operations on input
-                    if let Ok(reply) = ctx.read(line.as_str()){
-                        for r in reply{
-                            print!("{} ", r.to_string());
+                    match ctx.read(line.as_str()){
+                        Ok(reply) => {
+                            if reply.len() > 0{
+                                for r in reply{
+                                    print!("{} ", r.to_string());
+                                }
+                                print!("\n");
+                            }
+                        },
+                        Err(err) => {
+                            match err{
+                                ForthErr::ErrString(s) => {
+                                    println!("Error: {:?}", s);
+                                },
+                                ForthErr::ErrForthVal(v) => {
+                                    println!("Error on value: {:?}", v);
+                                }
+                            }
+                            
                         }
-                        print!("\n");
                     }
                 }
             }

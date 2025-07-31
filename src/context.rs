@@ -212,12 +212,15 @@ impl Workspace{
                 }
                 
                 self.ctx.mode = Mode::COMPILE;
-            }
+                Ok(())
+            },
             Mode::COMPILE => {
                 match v{
                     ForthVal::Sym(s) => {
                         if *s == ";".to_string(){
                             // End definition
+                            // TODO add case for modifying existing function
+                            // But also can't redefine a primitive
                             let id = self.lookup.len();
                             self.lookup.insert(self.ctx.define_word.clone().unwrap().clone(), id);
                             self.library.insert(id, ForthRoutine::Compiled(
@@ -227,21 +230,17 @@ impl Workspace{
                             self.ctx.mode = Mode::NORMAL;
                         }
                         else{
-                            // TODO add arguments
                             let id = self.lookup[s];
-                            // TODO push things like ints
                             self.ctx.definition.push(ForthVal::Func(id));
                         }
                     },
                     _ => {
-                        return Err(ForthErr::ErrString(
-                            format!("Invalid compiled token {}", v.to_string())
-                        ))
+                        self.ctx.definition.push(v.clone())
                     }
                 }
+                Ok(())
             }
-        };
-        Ok(())
+        }
     }
     
     /// Read line from interpreter
@@ -252,7 +251,7 @@ impl Workspace{
             let token = reader.next();
             match token{
                 Ok(v) => {
-                    self.interpret_token(&v);
+                    self.interpret_token(&v)?;
                 },
                 Err(err) => {
                     println!("Error {:#?}", err);
@@ -264,12 +263,13 @@ impl Workspace{
     }
     
     /// Read things from a forth line
-    pub fn run(&mut self, val: &ForthVal){
+    pub fn run(&mut self, val: &ForthVal) -> Result<(), ForthErr>{
         // TODO make this reply more detailed
         // with like character positions
         match val{
             ForthVal::Sys(s) => {
                 // system call
+                // May move these all to 
                 match s.as_str(){
                     // TODO decide/check if this clears stack
                     "" => {
@@ -286,11 +286,13 @@ impl Workspace{
                         }  
                     },
                     _ => {
-                        panic!("Unknown system call {}", s);
+                        return Err(ForthErr::ErrString(format!("Unknown special function {}", s)));
                     }
                 }
             },
             ForthVal::Sym(s) => {
+                // General symbol type
+                // This is normally a  word
                 if let Some(id) = self.lookup.get(s){
                     let routine = &self.library[id];
                     
@@ -307,17 +309,18 @@ impl Workspace{
                         },
                         ForthRoutine::Compiled(program) => {
                             for p in program.clone(){
-                                self.run(&p);
+                                self.run(&p)?;
                             }
                         }
                     };
                     
                 }
                 else{
-                    panic!("Unknown function {}", s);
+                    return Err(ForthErr::ErrString(format!("Unknown word {}", s)));
                 }
             },
             ForthVal::Func(f) => {
+                // This is for compiled functions
                 match &self.library[f]{
                     ForthRoutine::Prim(f) => {
                         let result = f(&mut self.ctx);
@@ -328,12 +331,13 @@ impl Workspace{
                     },
                     ForthRoutine::Compiled(program) => {
                         for p in program.clone(){
-                            self.run(&p);
+                            self.run(&p)?;
                         }
                     }
                 }
             },
             ForthVal::Meta(m) =>{
+                // Use backtick character to get information about functions
                 if let Some(id) = self.lookup.get(m){
                     match &self.library[id]{
                         ForthRoutine::Prim(_f) => {
@@ -350,6 +354,7 @@ impl Workspace{
                 self.ctx.push(val.clone());
             },
             ForthVal::Callable(m) => {
+                // Function pointer
                 match m.borrow(){
                     ForthRoutine::Prim(f) => {
                         let result = f(&mut self.ctx);
@@ -358,11 +363,15 @@ impl Workspace{
                             _ => self.ctx.push(result)
                         }
                     }
-                    _ => panic!("Can't infer a compiled function from a callable")
+                    _ => {
+                        return Err(ForthErr::ErrString(format!("Can't have a callable as a compiled function")));
+                    }
                 }
             }
             _ => self.ctx.push(val.clone())
-        }
+        };
+        
+        Ok(())
     }
 }
 

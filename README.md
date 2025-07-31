@@ -14,6 +14,16 @@ Runs in terminal as an interactive prompt. Example:
 
 The dictionary is compiled at run time. I'm putting together a standard library, but the goal is to be able to use the same framework for multiple hardware/software targets. A small number of types with a extensible dictionary should make this possible.
 
+## Adding words
+
+Words can be added as compilations of existing words
+
+```
+> ; square dup * ;
+> 5 square .
+25
+```
+
 ## Lists
 
 List data types can be containers of other data, such as ints or floats. There may be some way to implement better vector math, but currently are done pretty naively.
