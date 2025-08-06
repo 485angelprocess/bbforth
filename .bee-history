@@ -1,101 +1,101 @@
 #V2
-.s
+needs lib/audio
+4410 0 square .s
+4410 2 square .s
+needs lib/audio
+4410 2 square .s
 clear
-1 dup
-.s
-1 2 +
-1 2 + .
-1 2 .s
-.s
-1 2 +
-1 2 + .
-1 
-.s
-1 2
-.s
-1 2 +
-1 2 + .
-1 2 - .
-3 5 + .
-[1 2]
-1 2 + .
-[1 2]
-[1 2] 
-[1 2]
-.
-[1 2]
-.
-[1 2] .
-1 .
-[1 2]
-.
-[1 2] 3 +
-.
-[1] + .
-[1 2] 5 - .
-[1 2] 5 -
+4410 2 square .s
+needs lib/audio
+clear
+4410 3 square
 .
 clear
-[1 2] 5 + .
+4410 3 square .s
+needs lib/audio
+4410 3 ramp .s
 clear
-4 [1 2] + .
-4 + .
+4410 3 ramp .s
+clear
+4410 3 natural + swap .s
+freqtosample
+.s
+dup
+.s
+abc_cab
+.s
+% .s
+/ .s
+10.0 natural /
+.s
+clear
+10 natural /
+.s
+10.0 natural / .
+1 tofloat
+.
+1 tofloat
+.
+needs lib/audio
+4410 3 ramp .s
+needs lib/audio
+4410 3 ramp .s
+clear
+4410 3 ramp .s
+needs lib/audio
+4410 3 ramp .s
+4410 3 natural + swap freqtosample dup swap abc_cab % .s
+needs lib/audio
+4410 3 natural + swap freqtosample dup swap abc_cab % .s
+clear
+4410 3 natural + swap freqtosample dup swap abc_cab % .s
+4410 3 natural + swap freqtosample dup swap abc_cab % swap tofloat
+.s
+clear
+4410 3 natural + swap freqtosample dup swap abc_cab % swap tofloat /
+.
+3 4410 2 ramp .
+3 tofloat 4410 2 ramp .
+4410 2 ramp
+.
+4410 2 normalramp
+needs lib/audio
+4410 2 normalramp
+.
+4.0 swap *
+.
+clear
+10 4410 3 normalramp .s
+10 4410 3 normalramp 
+clear
+10 4410 3 normalramp .
+10 4410 3 normalramp . .
+10 4410 3 normalramp *
+.
+10.0 4410 3 normalramp *
+.
+needs lib/audio
+10 4410 3 normalramp .
+10 4410 3 ramp .
+0.1 4410 3 ramp .
+0.3
+.
+0.3212
+.
+0.1 4410 3 ramp .
+10 4410 3 ramp .
+needs lib/audio
+10 4410 3 ramp .
+4410 3 normalramp.
+4410 3 normalramp .
+needs lib/audio
+4410 3 normalramp .
+needs lib/audio
+4410 3 normalramp .
+10 4410 3 ramp .
+10 4410 0 square .
+10 8820 0 square .
 `+
-.
 5 4 + .
-wave
-1 2 wave
-.
-1 2 wave
-.
-1 2 wave
-.
-1 2 wave .
-1 2 wave
-.
-1 2 wave
-.
-1 2 wave
-.
-"abc"
-.
-"abc"
-.
-"abc" .
-1 (120 5 wave) +
-5 120 5 wave +
-5 120 10 wave +
-.
-5 120 1 wave +
-.
-5 120 10 wave + .
-10 1 120 wave + .
-5 120 3 wave + .
-120 10 wave .
-clear
-5 120 10 wave + .
-6 120 10 wave + .
-5 120 10 wave + .
-120 10 wave
-5 + .
-natural
-.
-natural 5 + .
-[1 2 3] [4 5 6] + .
-5 3 + .
-asdf
-.
-asdf
-asfd
-asdf
-adsf
-aasdf
-asdf
-asfd
-: sayhi 5 . ;
-sayhi
-: abc 6 5 + . ;
-abc
-; square dup * ;
-: square dup * ;
-5 square .
+natural 1 + .
+natural play

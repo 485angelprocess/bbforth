@@ -1,6 +1,6 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{borrow::Borrow, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
-use crate::{context::{ForthRoutine, Workspace, WorkspaceContext}, types::ForthVal};
+use crate::{context::{Workspace, WorkspaceContext}, types::ForthVal};
 
 /*
 Generate lazy lists
@@ -18,14 +18,29 @@ pub struct GenEnv{
 /// TODO int generator unit
 pub trait Generator{
     fn num_args(&self) -> usize;
-    fn next(&self, env: &GenEnv) -> ForthVal;
+    fn nextf(&mut self, env: &GenEnv) -> f64;
+    fn next(&mut self, env: &GenEnv) -> ForthVal{
+        ForthVal::Float(self.nextf(env))
+    }
+    fn make_clone(&self) -> Box<dyn Generator>;
 }
 
-#[derive(Clone)]
 pub struct GeneratorUnit{
     pub env: GenEnv,
-    pub gen: Rc<dyn Generator>,
-    pub trace: Vec<ForthVal>
+    pub gen: Box<dyn Generator>,
+    pub trace: Vec<ForthVal>,
+    pub ws: Workspace
+}
+
+impl Clone for GeneratorUnit{
+    fn clone(&self) -> Self {
+        Self{
+            env: self.env.clone(),
+            trace: self.trace.clone(),
+            ws: Workspace::new(),
+            gen: self.gen.make_clone()
+        }
+    }
 }
 
 impl GeneratorUnit{
@@ -46,19 +61,23 @@ impl GeneratorUnit{
     
     /// Get next value from generator
     pub fn next(&mut self) -> ForthVal{
-        let result = self.gen.next(&self.env);
+        let result = ForthVal::Float(self.nextf());
+        
+        result
+    }
+    
+    pub fn nextf(&mut self) -> f64{
+        let result = self.gen.nextf(&self.env);
         
         self.env.counter += 1;
         
         if self.trace.len() > 0{
-            let mut ws = Workspace::new();
-            
-            ws.ctx.push(result.clone());
+            self.ws.ctx.push(ForthVal::Float(result.clone()));
             
             for v in &self.trace{
-                ws.run(v);
+                let _ = self.ws.run(v);
             }
-            return ws.ctx.pop().unwrap();
+            return self.ws.ctx.pop().unwrap().to_float().unwrap();
         }
         
         result
@@ -74,7 +93,7 @@ impl PartialEq for GeneratorUnit{
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Natural{
 }
 
@@ -82,7 +101,34 @@ impl Generator for Natural{
     fn num_args(&self) -> usize {
         0
     }
-    fn next(&self, env: &GenEnv) -> ForthVal {
-        ForthVal::Float(env.counter as f64)
+    fn nextf(&mut self, env: &GenEnv) -> f64{
+        env.counter as f64
+    }
+    fn make_clone(&self) -> Box<dyn Generator> {
+        Box::new(Natural::default())
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct Ramp{
+    value: usize
+}
+
+impl Generator for Ramp{
+    fn num_args(&self) -> usize {
+        1
+    }
+    fn nextf(&mut self, env: &GenEnv) -> f64{
+        let period = env.args[0].to_int().unwrap() as usize; // TODO make more flexible
+        if self.value == period - 1{
+            self.value = 0;
+        }
+        else{
+            self.value += 1;
+        }
+        self.value as f64
+    }
+    fn make_clone(&self) -> Box<dyn Generator> {
+        Box::new(Ramp::default())
     }
 }

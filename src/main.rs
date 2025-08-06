@@ -3,13 +3,21 @@ extern crate rustyline;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+
+
 mod reader;
 mod types;
 mod context;
 mod math;
 mod generator;
+mod audio;
+mod drivers;
 
 use types::ForthErr;
+
+
+
+
 
 fn main(){
     println!("__welcome__");
@@ -25,9 +33,12 @@ fn main(){
     
     ctx.setup();
     
+    ctx.read_file("prelude.fs");
+    
     // Main loop
     loop{
-        let readline =rl.readline("> ");
+        let readline =rl.readline(
+            format!("{} ", ctx.prompt()).as_str());
         match readline{
             Ok(line) => {
                 if !line.is_empty(){
@@ -54,7 +65,6 @@ fn main(){
                                     println!("Error on value: {:?}", v);
                                 }
                             }
-                            
                         }
                     }
                 }

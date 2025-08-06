@@ -1,8 +1,5 @@
-use std::{any::Any, fmt::Write, rc::Rc};
-
-use regex::Error;
-
-use crate::{context::{ForthRoutine, WorkspaceContext}, generator::GeneratorUnit, math};
+use crate::{context::{ForthRoutine}, generator::GeneratorUnit, math};
+use std::rc::Rc;
 
 /// Forth value
 #[derive(Clone)]
@@ -12,21 +9,20 @@ pub enum ForthVal{
     Int(i64),
     Float(f64),
     Str(String),
+    List(Vec<ForthVal>),
+    Generator(GeneratorUnit),
     // Symbol
     Sym(String),
     // System call
     Sys(String),
-    // List
-    List(Vec<ForthVal>),
-    // Generator
     // A line
-    Vector(Rc<Vec<ForthVal>>),
+    Vector(Vec<ForthVal>),
     // For information about a function
     Meta(String),
-    Generator(GeneratorUnit),
-    Callable(Rc<ForthRoutine>),
+    Callable(ForthRoutine),
     // Compiled program
-    Func(usize)
+    Func(usize),
+    Err(String)
 }
 
 impl std::fmt::Debug for ForthVal{
@@ -73,17 +69,19 @@ impl ForthVal{
         match self{
             ForthVal::Null => "None".to_string(),
             ForthVal::Int(v) => format!("{}", v),
-            ForthVal::Float(f) => format!("{}", f),
+            ForthVal::Float(f) => format!("{:.4}", f),
             ForthVal::Str(s) => format!("'{}'", s),
             ForthVal::Sym(s) => format!("{}", s),
             ForthVal::Sys(s) => format!(".{}", s),
             ForthVal::List(v) => format!("{:?}", v),
             ForthVal::Meta(v) => format!("Function {}", v),
+            ForthVal::Err(e) => format!("Error: {}", e),
+            ForthVal::Func(id) => format!("Function with id {}", id),
             ForthVal::Generator(gen) => {
                 let mut g = gen.clone();
                 let mut v = String::new();
                 v.push_str("{");
-                for i in 0..9{
+                for _i in 0..9{
                     v.push_str(format!("{}, ", g.next().to_string()).as_str());
                 }
                 v.push_str(" ... }");
@@ -103,6 +101,7 @@ impl ForthVal{
     pub fn to_float(&self) -> Result<f64, ForthErr>{
         match self{
             ForthVal::Float(f) => Ok(f.clone()),
+            ForthVal::Int(v) => Ok(v.clone() as f64),
             _ => Err(ForthErr::ErrForthVal(self.clone()))
         }
     }
@@ -114,17 +113,17 @@ impl ForthVal{
                 match other{
                     ForthVal::Int(b) => Ok(ForthVal::Int(fi(a, b))),
                     ForthVal::Float(b) => Ok(ForthVal::Int(fi(a, &(b.round() as i64)))),
-                    ForthVal::List(b) =>  operate_list(b, other, fi, ff, true),
+                    ForthVal::List(b) =>  operate_list(b, self, fi, ff, true),
                     ForthVal::Generator(gen) => {
-                      let mut gn = gen;
+                      let gn = gen;
                       Ok(ForthVal::Generator(
                           gn.clone()
                             .push(self)
-                            .push(&ForthVal::Callable(Rc::new(
+                            .push(&ForthVal::Callable(
                                 ForthRoutine::Prim(
                                     math::binary_op(fi, ff)
                                 )
-                            ))).clone()
+                            )).clone()
                         )) 
                     },
                     _ => Err(ForthErr::ErrString("Can't add with int".to_string()))
@@ -134,17 +133,17 @@ impl ForthVal{
                 match other{
                     ForthVal::Int(b) => Ok(ForthVal::Float(ff(a, &(*b as f64)))),
                     ForthVal::Float(b) => Ok(ForthVal::Float(ff(a, b))),
-                    ForthVal::List(b) =>  operate_list(b, other, fi, ff, true),
+                    ForthVal::List(b) =>  operate_list(b, self, fi, ff, true),
                     ForthVal::Generator(gen) => {
-                      let mut gn = gen;
+                      let gn = gen;
                       Ok(ForthVal::Generator(
                           gn.clone()
                             .push(self)
-                            .push(&ForthVal::Callable(Rc::new(
+                            .push(&ForthVal::Callable(
                                 ForthRoutine::Prim(
                                     math::binary_op(fi, ff)
                                 )
-                            ))).clone()
+                            )).clone()
                         )) 
                     },
                     _ => Err(ForthErr::ErrString("Can't add with int".to_string()))
@@ -154,15 +153,15 @@ impl ForthVal{
                 operate_list(contents, other, fi, ff, false)
             },
             ForthVal::Generator(gen) => {
-                let mut gn = gen.clone();
+                let gn = gen.clone();
                 Ok(ForthVal::Generator(
                     gn.clone()
                         .push(other)
-                        .push(&ForthVal::Callable(Rc::new(
+                        .push(&ForthVal::Callable(
                             ForthRoutine::Prim(
                                 math::binary_op(fi, ff))
                             )
-                        ))
+                        )
                         .clone()
                 ))
             }

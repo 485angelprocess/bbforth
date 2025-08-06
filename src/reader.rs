@@ -68,7 +68,6 @@ fn read_list(reader: &mut ForthReader) -> ForthRet{
             _ => read_atom(&token)?
         };
         
-        println!("Pushing to list {}", val.to_string());
         mlist.push(val);
         
         reader.step();
@@ -94,6 +93,7 @@ fn read_token(reader: &mut ForthReader) -> ForthRet{
             read_meta(reader)  
         },
         "]" => Err(ForthErr::ErrString("Got end of list before start of list".to_string())),
+        "\\" => {reader.comment = true; Ok(ForthVal::Null)},
         _ => read_atom(&token)
     }
 }
@@ -101,7 +101,8 @@ fn read_token(reader: &mut ForthReader) -> ForthRet{
 #[derive(Debug, Clone)]
 pub struct ForthReader{
     tokens: Vec<String>,
-    pos: usize
+    pos: usize,
+    comment: bool
 }
 
 impl ForthReader{
@@ -116,7 +117,7 @@ impl ForthReader{
     }
     
     pub fn is_done(&self) -> bool{
-        self.pos == self.tokens.len()
+        self.pos == self.tokens.len() || self.comment || self.tokens[0] == "\\"
     }
     
     /// Increment position
@@ -127,11 +128,13 @@ impl ForthReader{
     pub fn from_line(s: &str) -> Self{
         Self{
             tokens: tokenize(s),
-            pos: 0
+            pos: 0,
+            comment: false
         }
     }
+    
     pub fn is_empty(&self) -> bool{
-        self.tokens.len() == 0
+        self.tokens.len() == 0 || self.tokens[0].starts_with('\\')
     }
     
     pub fn next(&mut self) -> ForthRet{
