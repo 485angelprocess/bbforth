@@ -49,7 +49,7 @@ fn read_atom(token: &String) -> ForthRet{
         Ok(ForthVal::Float(token.parse().unwrap()))
     }
     else if STR_RE.is_match(&token){
-        // TODO unescape
+        // TODO better unescape
         // I think forth also usually has it has a ." String " sequence
         Ok(ForthVal::Str(token[1..token.len()-1].to_string()))
     }
