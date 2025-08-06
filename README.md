@@ -64,3 +64,17 @@ Values are calculated as needed. Operations can be done on lazy lists/generators
 > natural 5 + .
 {5, 6, 7, 8, 9, 10, 11, 12, 13,  ... }
 ```
+
+## Loading files
+
+Files can be loaded using the needs word. File `lib/math.fs` can be loaded:
+
+```
+needs lib/math
+```
+
+Forth files can contain definitions and functions. I may add some support for file caching, but currently files are just reloaded when asked for.
+
+## UART Communication
+
+I am using this as a interface method for my RISC-V softcore. Support is added for serial in/out.
