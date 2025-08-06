@@ -13,15 +13,22 @@
 : rws puts 200 delay gets ;
 : displays dup list_to_char . . ;
 
+0 const DebugAddress
 256 const MemoryAddress
 : read_delay 100 delay gets ;
+
 : memaddr MemoryAddress + ;
+: debugaddr DebugAddress + ;
+
 : ids "I" puts read_delay displays ;
 : writes "W" puts puts puts read_delay ;
 : reads "R" puts puts read_delay ;
 
 : writeaddr memaddr writes ;
 : readaddr memaddr reads ;
+
+: writedebug debugaddr writes ;
+: readdebug debugaddr reads ;
 
 "Connecting serial" .
 115200 "/dev/ttyUSB2" serial_start

@@ -1,101 +1,101 @@
 #V2
-needs lib/audio
-4410 3 ramp .s
-needs lib/audio
-4410 3 ramp .s
-clear
-4410 3 ramp .s
-needs lib/audio
-4410 3 ramp .s
-4410 3 natural + swap freqtosample dup swap abc_cab % .s
-needs lib/audio
-4410 3 natural + swap freqtosample dup swap abc_cab % .s
-clear
-4410 3 natural + swap freqtosample dup swap abc_cab % .s
-4410 3 natural + swap freqtosample dup swap abc_cab % swap tofloat
+`getdata
+[50 0 0 0 0 0 0 0 1] getdata
+[50 0 0 0 0 0 0 0 1] dup 0 access
 .s
+[50 0 0 0 0 0 0 0 1] dup 0 access swap dup 1 access .s
+[50 0 0 0 0 0 0 0 1] dup 0 access swap 1 access .s
 clear
-4410 3 natural + swap freqtosample dup swap abc_cab % swap tofloat /
-.
-3 4410 2 ramp .
-3 tofloat 4410 2 ramp .
-4410 2 ramp
-.
-4410 2 normalramp
-needs lib/audio
-4410 2 normalramp
-.
-4.0 swap *
-.
-clear
-10 4410 3 normalramp .s
-10 4410 3 normalramp 
-clear
-10 4410 3 normalramp .
-10 4410 3 normalramp . .
-10 4410 3 normalramp *
-.
-10.0 4410 3 normalramp *
-.
-needs lib/audio
-10 4410 3 normalramp .
-10 4410 3 ramp .
-0.1 4410 3 ramp .
-0.3
-.
-0.3212
-.
-0.1 4410 3 ramp .
-10 4410 3 ramp .
-needs lib/audio
-10 4410 3 ramp .
-4410 3 normalramp.
-4410 3 normalramp .
-needs lib/audio
-4410 3 normalramp .
-needs lib/audio
-4410 3 normalramp .
-10 4410 3 ramp .
-10 4410 0 square .
-10 8820 0 square .
-`+
-5 4 + .
-natural 1 + .
-natural play
-`serial_list
-serial_list
-serial_start /dev/ttyUSB2
-"/dev/ttyUSB2" serial_start
-"I" puts
-gets .
-"I" puts gets displays
-10 0 writeaddr
-0 readaddr 
-10 0 writeaddr
-0 readaddr 
-"I" puts gets displays
-1000 readaddr 
-"R" puts 257 puts gets displays
-gets
-resets
-gets
-0 readaddr
-100 readaddr
-266 "R" puts puts gets displays
-1 11 writeaddr
-11 readaddr
-15 11 writeaddr
-11 readaddr
+[50 0 0 0 0 0 0 0 1] dup 0 access swap 1 access .s
+[50 0 0 0 0 0 0 0 1] dup 0 access swap dup 1 access swap dup 2 access .s
 needs lib/test/test_device
-11 0 writeaddr
-0 readaddr
-resets
-11 0 writeaddr
-0 readaddr
+[10 15 15 15 15 0 0 0 1] getdata
 needs lib/test/test_device
-11 0 writeaddr 0 readaddr
+[1 2 3 4 5 6 7 8 9 10] slicedata
+.s
+[1 2 3 4 5 6 7 8 9 10] slicedata
+needs lib/test/test_device
+[1 2 3 4 5 6 7 8 9 10] slicedata
 .s
 needs lib/test/test_device
-11 0 writeaddr 0 readaddr
+[1 2 3 4 5 6 7 8 9 10] slicedata
 .s
-==
+needs lib/test/test_device
+[1 2 3 4 5 6 7 8 9 10] slicedata
+.s
+needs lib/test/test_device
+1 2 3 4 8to32
+1 2 3 4 5 6 8to32
+needs lib/test/test_device
+1 2 3 4 5 6 8to32
+.s
+8 2 lshift
+.s
+15 8 8 lshift swap +
+.s
+clear
+1 2 3 4 24 lshift .s
+clear
+1 2 3 4 24 lshift swap 16 lshift
+.s
+1 2 3 4 24 lshift swap 16 lshift abc_cab
+.s
+1 2 3 4 24 lshift swap 16 lshift abc_cab swap
+clear
+1 2 3 4 24 lshift swap 16 lshift abc_cab swap
+.s
+1 2 3 4 24 lshift swap 16 lshift + .s
+clear
+1 2 3 4 24 lshift swap 16 lshift + .s
+1 2 3 4 24 lshift swap 16 lshift + swap 8 lshift + swap +
+.s
+clear
+1 2 3 4 24 lshift swap 16 lshift + swap 8 lshift + swap +
+.s
+needs lib/test/test_device
+1 2 3 4 8to32
+.
+4 3 2 1 8to32 .
+1 2 3 4 8to32 .
+needs lib/test/test_device
+1 2 3 4 8to32
+.s
+.
+[1 2 3 4] slicedata 8to32
+[87 0 0 0 0 1 2 3 4] slicedata 8to32
+needs lib/test/test_device
+[87 0 0 0 0 1 2 3 4] slicedata 8to32
+.
+[87 0 0 0 0 4 3 2 1] slicedata 8to32
+.
+needs lib/test/test_device
+[87 0 0 0 0 4 3 2 1] slicedata 8to32
+.
+[87 0 0 0 0 1 2 3 4] slicedata 8to32 .
+needs lib/test/test_device
+`writedata
+11 0 writedata .
+11 0 writeaddr slicedata
+.
+11 0 writeaddr .
+11 0 writeaddr slicedata .s
+clear
+11 0 writeaddr slicedata .s
+11 0 writeaddr slicedata 8to32 .
+11 0 writeaddr .
+needs lib/test/test_device
+11 0 writeaddr slicedata 8to32 .
+11 0 writedata .
+0 readdata .
+needs lib/test/test_device
+`debugread
+`readdebug
+0 readdebug
+0 readdebug .
+clear
+1 0 writedebug .
+0 readdebug .
+needs lib/test/test_device
+debugread
+`readdebug
+needs lib/test/test_device
