@@ -1,10 +1,5 @@
 needs prelude
 
-\ Hardware in loop testing
-
-\ (n n msg --> None if n==n, throws error if not)
-: assert_equal abc_cab == swap assert ;
-
 \ Math for getting response
 : slicedata dup 8 access swap dup 7 access swap dup 6 access swap 5 access ;
 : 8to32 24 lshift swap 16 lshift + swap 8 lshift + + ;

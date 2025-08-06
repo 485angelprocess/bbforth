@@ -30,7 +30,10 @@
 : writedebug debugaddr writes ;
 : readdebug debugaddr reads ;
 
+\ (n n msg --> None if n==n, throws error if not)
+: assert_equal abc_cab == swap assert ;
+
 "Connecting serial" .
-115200 "/dev/ttyUSB2" serial_start
+115200 serial_list 0 access serial_start
 
 "Ran prelude" .

@@ -613,6 +613,15 @@ impl Workspace{
                             self.ctx.reply.push(self.ctx.peek(i).unwrap().clone());
                         }
                     },
+                    "x" => {
+                        if let Some(v) = self.ctx.pop(){
+                            self.ctx.reply.push(ForthVal::Str(format!("{:#02x}", 
+                                v.to_int().unwrap())));
+                        }
+                        else{
+                            self.ctx.reply.push(ForthVal::Str("Stack empty".to_string()));
+                        }
+                    }
                     _ => {
                         return Err(ForthErr::ErrString(format!("Unknown special function {}", s)));
                     }
