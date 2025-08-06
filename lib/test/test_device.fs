@@ -8,3 +8,9 @@ needs prelude
 \ Check memory read write
 \ Should be able to read and write to memory
 : test_direct_rw 11 0 writeaddr 0 readaddr 11 "Memory read write" assert_equal ;
+
+"Resetting" .
+resets
+
+"Test Direct RW" .
+test_direct_rw

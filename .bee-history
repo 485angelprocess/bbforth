@@ -1,42 +1,5 @@
 #V2
 needs lib/audio
-4410 0 square .s
-4410 2 square .s
-needs lib/audio
-4410 2 square .s
-clear
-4410 2 square .s
-needs lib/audio
-clear
-4410 3 square
-.
-clear
-4410 3 square .s
-needs lib/audio
-4410 3 ramp .s
-clear
-4410 3 ramp .s
-clear
-4410 3 natural + swap .s
-freqtosample
-.s
-dup
-.s
-abc_cab
-.s
-% .s
-/ .s
-10.0 natural /
-.s
-clear
-10 natural /
-.s
-10.0 natural / .
-1 tofloat
-.
-1 tofloat
-.
-needs lib/audio
 4410 3 ramp .s
 needs lib/audio
 4410 3 ramp .s
@@ -99,3 +62,40 @@ needs lib/audio
 5 4 + .
 natural 1 + .
 natural play
+`serial_list
+serial_list
+serial_start /dev/ttyUSB2
+"/dev/ttyUSB2" serial_start
+"I" puts
+gets .
+"I" puts gets displays
+10 0 writeaddr
+0 readaddr 
+10 0 writeaddr
+0 readaddr 
+"I" puts gets displays
+1000 readaddr 
+"R" puts 257 puts gets displays
+gets
+resets
+gets
+0 readaddr
+100 readaddr
+266 "R" puts puts gets displays
+1 11 writeaddr
+11 readaddr
+15 11 writeaddr
+11 readaddr
+needs lib/test/test_device
+11 0 writeaddr
+0 readaddr
+resets
+11 0 writeaddr
+0 readaddr
+needs lib/test/test_device
+11 0 writeaddr 0 readaddr
+.s
+needs lib/test/test_device
+11 0 writeaddr 0 readaddr
+.s
+==
