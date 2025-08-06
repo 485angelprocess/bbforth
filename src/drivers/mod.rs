@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use std::rc::Rc;
 use serialport::SerialPort;
 
 use crate::types::ForthVal;
 
+/// Convert forth value into bytes
 fn to_bytes(v: &ForthVal) -> Vec<u8>{
    match v{
        ForthVal::Str(s) => s.as_bytes().to_vec(),
@@ -13,9 +13,7 @@ fn to_bytes(v: &ForthVal) -> Vec<u8>{
    }
 }
 
-/*
-External serial device
-*/
+/// Serial port driver
 pub struct Serial{
     port: Option<Box<dyn SerialPort>>
 }

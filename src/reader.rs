@@ -27,12 +27,23 @@ fn tokenize(str: &str) -> Vec<String>{
 fn read_atom(token: &String) -> ForthRet{
     lazy_static!{
         static ref INT_RE: Regex = Regex::new(r"^-?[0-9]+$").unwrap();
+        static ref HEX_RE: Regex = Regex::new(r"x[0-9|A-F|a-f]+$").unwrap();
+        static ref BIN_RE: Regex = Regex::new(r"b[0-1]+$").unwrap();
         static ref FLOAT_RE: Regex = Regex::new(r"^-?[0-9]+.[0-9]+$").unwrap();
         static ref STR_RE: Regex = Regex::new(r#""(?:\\.|[^\\"])*""#).unwrap();
     }
     
     if INT_RE.is_match(&token){
         Ok(ForthVal::Int(token.parse().unwrap()))
+    }
+    else if HEX_RE.is_match(&token){
+        // Convert from hex
+        let wo_prefix= token.trim_start_matches("x");
+        Ok(ForthVal::Int(i64::from_str_radix(wo_prefix, 16).unwrap()))
+    }
+    else if BIN_RE.is_match(&token){
+        let wo_prefix = token.trim_start_matches("b");
+        Ok(ForthVal::Int(i64::from_str_radix(wo_prefix, 2).unwrap()))
     }
     else if FLOAT_RE.is_match(&token){
         Ok(ForthVal::Float(token.parse().unwrap()))
