@@ -387,6 +387,19 @@ impl Workspace{
             ForthVal::Int(b << a)
         });
         
+        dict.insert("access", |ws|{
+           let id = ws.pop().unwrap().to_int().unwrap();
+           let v = ws.pop().unwrap();
+           match v{
+               ForthVal::List(collection) => {
+                   collection[id as usize].clone()
+               },
+               _ => {
+                   ForthVal::Err(format!("Invalid value for collect: {:?}", v))
+               }
+           } 
+        });
+        
         // Dictionary operations
         dict.insert(":",start_define);
         // Semicolon is actualyl handled special, because it it gets close to touching
