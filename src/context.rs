@@ -381,11 +381,21 @@ impl Workspace{
            ForthVal::Float(ws.pop().unwrap().to_float().unwrap()) 
         });
         
-        dict.insert("lshift", |ws|{
-            let a = ws.pop().unwrap().to_int().unwrap();
-            let b = ws.pop().unwrap().to_int().unwrap();
-            ForthVal::Int(b << a)
-        });
+        dict.insert_ptr("lshift", math::binary_op(
+                |a, b|{b<<a}, 
+                |_a, _b|{panic!("Can't rshift floats")}));
+        
+        dict.insert_ptr("rshift", math::binary_op(
+                |a, b|{b>>a}, 
+                |_a, _b|{panic!("Can't rshift floats")}));
+                
+        dict.insert_ptr("&", math::binary_op(
+                |a, b|{b&a}, 
+                |_a, _b|{panic!("Can't rshift floats")}));
+                
+        dict.insert_ptr("|", math::binary_op(
+                |a, b|{b|a}, 
+                |_a, _b|{panic!("Can't rshift floats")}));
         
         dict.insert("access", |ws|{
            let id = ws.pop().unwrap().to_int().unwrap();
@@ -616,6 +626,15 @@ impl Workspace{
                     "x" => {
                         if let Some(v) = self.ctx.pop(){
                             self.ctx.reply.push(ForthVal::Str(format!("{:#02x}", 
+                                v.to_int().unwrap())));
+                        }
+                        else{
+                            self.ctx.reply.push(ForthVal::Str("Stack empty".to_string()));
+                        }
+                    },
+                    "b" => {
+                        if let Some(v) = self.ctx.pop(){
+                            self.ctx.reply.push(ForthVal::Str(format!("{:#02b}", 
                                 v.to_int().unwrap())));
                         }
                         else{

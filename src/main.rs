@@ -15,10 +15,6 @@ mod drivers;
 
 use types::ForthErr;
 
-
-
-
-
 fn main(){
     println!("__welcome__");
     
@@ -33,7 +29,7 @@ fn main(){
     
     ctx.setup();
     
-    ctx.read_file("prelude.fs");
+    ctx.read_file("lib/prelude.fs");
     
     // Main loop
     loop{

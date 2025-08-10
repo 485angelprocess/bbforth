@@ -29,7 +29,7 @@ impl Serial{
         let mut ports = Vec::new();
         
         for p in serialport::available_ports().expect("No ports found"){
-            println!("{}", p.port_name);
+            //println!("{}", p.port_name);
             ports.push(ForthVal::Str(p.port_name));
         }
         
@@ -58,11 +58,11 @@ impl Serial{
     
     pub fn put(&mut self, msg: &ForthVal) -> ForthVal{
         let bytes = to_bytes(msg);
-        println!("Sending bytes {:?}", bytes);
+        //println!("Sending bytes {:?}", bytes);
         
         if let Some(p) = &mut self.port{
             let wlen = p.write(bytes.as_slice()).expect("Write failed");
-            println!("Wrote {} bytes", wlen);
+            //println!("Wrote {} bytes", wlen);
         }
         else{
             // temp tell me the info
