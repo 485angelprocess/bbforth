@@ -1,13 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::thread;
-use std::time::Duration;
-
-use rustyline::completion::Completer;
 
 use crate::drivers::Serial;
 use crate::generator::*;
-use crate::math;
 use crate::reader::{self};
 use crate::types::{ForthErr, ForthVal};
 
@@ -16,6 +11,13 @@ use std::io::{self, BufRead};
 use std::path::Path;
 
 use crate::audio::AudioContext;
+
+mod functions;
+mod dictionary;
+pub mod math;
+
+use dictionary::*;
+use functions::*;
 
 // function call
 pub type ForthFn = fn(&mut WorkspaceContext) -> ForthVal;
@@ -35,46 +37,6 @@ pub enum ForthRoutine{
     Compiled(Vec<ForthVal>)
 }
 
-/// Duplicate top of stack
-fn dup(ws: &mut WorkspaceContext) -> ForthVal{
-    let t = ws.last().unwrap();
-    ws.push(t.clone());
-    ForthVal::Null
-}
-
-fn generator<T: Generator + Default + 'static>(ws: &mut WorkspaceContext) -> ForthVal{
-    let mut gu = GeneratorUnit{
-        env: GenEnv::default(),
-        gen: Box::new(T::default()),
-        trace: Vec::new(),
-        ws: Workspace::new()
-    };
-    gu.consume(ws);
-    ForthVal::Generator(gu)
-}
-
-/// Start definition
-fn start_define(ws: &mut WorkspaceContext) -> ForthVal{
-    match ws.mode{
-        Mode::NORMAL => {
-            ws.mode = Mode::DECLARE;
-            ForthVal::Null
-        },
-        _ => panic!("Already making definition")
-    }
-}
-
-/// End definition
-fn end_define(ws: &mut WorkspaceContext) -> ForthVal{
-    ws.dictionary.insert_routine(&ws.define_word.as_ref().unwrap().clone(), 
-        ForthRoutine::Compiled(
-                ws.definition.clone()
-    ));
-    ws.definition.clear();
-    ws.mode = Mode::NORMAL;
-    ForthVal::Null
-}
-
 #[derive(PartialEq, Debug, Clone)]
 enum Mode{
     NORMAL,
@@ -83,61 +45,15 @@ enum Mode{
     NEEDS,
     DEFINE,
     DOCUMENT,
-    CONDITION
+    CONDITION,
+    ASSIGN,
+    FORM,
+    FORM_DEFINE
 }
 
-#[derive(Clone)]
-pub struct Dictionary{
-    pub lookup: HashMap<String, usize>,
-    pub library: HashMap<usize, ForthRoutine>,
-}
-
-impl Dictionary{
-    fn new() -> Self{
-        Self{
-            lookup: HashMap::new(),
-            library: HashMap::new()
-        }
-    }
-    
-    pub fn len(&self) -> usize{
-        self.lookup.len()
-    }
-    
-    pub fn get_val(&self, s: &String) -> Option<ForthVal>{
-        let f = self.library.get(self.lookup.get(s).unwrap()).unwrap();
-        match f{
-            ForthRoutine::Prim(_p) => Some(ForthVal::Callable(f.clone())),
-            ForthRoutine::Compiled(v) => Some(ForthVal::Vector(v.clone()))
-        }
-    }
-    
-    /// Insert new definition
-    pub fn insert(&mut self, s: &str, f: ForthFn) -> usize{
-        self.insert_routine(&s.to_string(), ForthRoutine::Prim(Rc::new(f)))
-    }
-    
-    /// Insert function pointer
-    pub fn insert_ptr(&mut self, s: &str, f: ForthFnGen) -> usize{
-        self.insert_routine(&s.to_string(), ForthRoutine::Prim(f))
-    }
-    
-    /// Insert generator object
-    fn insert_generator<T: Generator + Default + 'static>(&mut self, s: &str) -> usize{
-        self.insert_routine(&s.to_string(), ForthRoutine::Prim(Rc::new(|ws| generator::<T>(ws))))
-    }
-    
-    /// Insert routine
-    fn insert_routine(&mut self, s: &String, f: ForthRoutine) -> usize{
-        let id = match self.lookup.get(s){
-            Some(v) => v.clone(),
-            None => self.lookup.len()
-        };
-        
-        self.lookup.insert(s.clone(), id);
-        self.library.insert(id, f);
-        id
-    }
+enum Namespace{
+    MAIN,
+    CLIENT
 }
 
 pub struct WorkspaceContext{
@@ -148,7 +64,9 @@ pub struct WorkspaceContext{
     mode: Mode,
     pub define_word: Option<String>,
     pub definition: Vec<ForthVal>,
-    
+    pub args: HashMap<String, ForthVal>,
+    pub form_builder: HashMap<String, ForthVal>,
+    pub form_word: String,
     pub dictionary: Dictionary,
     
     pub audio: AudioContext,
@@ -163,6 +81,11 @@ impl WorkspaceContext{
             reply: Vec::new(),
             mode: Mode::NORMAL,
             define_word: None,
+            args: HashMap::new(),
+            
+            form_word: String::new(),
+            form_builder: HashMap::new(),
+            
             definition: Vec::new(),
             dictionary: Dictionary::new(),
             audio: AudioContext::new(),
@@ -206,7 +129,7 @@ impl WorkspaceContext{
                     "(" => {self.mode = Mode::DOCUMENT;},
                     ")" => {self.mode = Mode::COMPILE;},
                     _ => {
-                       match self.dictionary.lookup.get(s){
+                       match self.dictionary.get_id(s){
                         Some(id) => self.definition.push(ForthVal::Func(*id)),
                         None => println!("Word not found {}", s)
                        };
@@ -218,6 +141,17 @@ impl WorkspaceContext{
                 self.definition.push(v.clone())
             }
         }
+    }
+    
+    pub fn define_form_field(&mut self, value: &ForthVal){
+        let name = self.form_word.clone();
+        
+        match value{
+            ForthVal::Null => todo!("Handle invalid field name"),
+            _ => {
+                self.form_builder.insert(name, value.clone());
+            }
+        };
     }
 }
 
@@ -239,6 +173,7 @@ impl Workspace{
         s
     }
     
+    /// Display prompt based on context
     pub fn prompt(&self) -> &str{
         match self.ctx.mode{
             Mode::DECLARE => "dec>",
@@ -247,219 +182,15 @@ impl Workspace{
             Mode::DEFINE =>  "def>",
             Mode::DOCUMENT => "doc>",
             Mode::CONDITION => "?>",
-            _ => ">"
+            _ => {
+                if self.ctx.dictionary.is_local(){
+                    "riscv>"
+                }
+                else{
+                    ">"
+                }
+            }
         }
-    }
-    
-    /// Declare primitive functions
-    pub fn setup(&mut self){
-        let dict = &mut self.ctx.dictionary;
-        // Stack operations
-        dict.insert(
-            "dup",
-            dup
-        );
-        
-        dict.insert(
-            "swap",
-            |ws|{
-                let a = ws.pop().unwrap();
-                let b = ws.pop().unwrap();
-                ForthVal::Vector(vec![a, b])
-            }
-        );
-        
-        dict.insert(
-            "abc_cab",
-            |ws|{
-                let a = ws.pop().unwrap();
-                let b = ws.pop().unwrap();
-                let c = ws.pop().unwrap();
-                ForthVal::Vector(vec![a, c, b])
-            }
-        );
-        
-        dict.insert(
-            "const",
-            |ws|{
-                let v = ws.pop().unwrap().clone();
-                ws.compile(&v);
-                ws.mode = Mode::DEFINE;
-                ForthVal::Null
-            }
-        );
-        
-        dict.insert(
-            "clear",
-            |ws| {
-                ws.stack.clear();
-                ForthVal::Null
-            }
-        );
-        
-        dict.insert("if", |ws|{
-            if ws.pop().unwrap().to_int().unwrap() == 0{
-                ws.mode = Mode::CONDITION;
-            } 
-            ForthVal::Null
-        });
-        
-        dict.insert("then", |ws|{
-            if ws.mode == Mode::CONDITION{
-                ws.mode = Mode::NORMAL;
-            }
-            ForthVal::Null
-        });
-        
-        dict.insert(
-            "needs",
-            |ws|{ws.mode = Mode::NEEDS; ForthVal::Null}
-        );
-        
-        dict.insert(
-            "delay",
-            |ws| {
-                thread::sleep(Duration::from_millis(ws.pop().unwrap().to_int().unwrap() as u64));
-                ForthVal::Null
-            }
-        );
-        
-        dict.insert(
-            "==",
-            |ws| {
-                let a = ws.pop().unwrap();
-                let b = ws.pop().unwrap();
-                
-                if a.to_int().unwrap() == b.to_int().unwrap(){
-                    ForthVal::Int(1)
-                }
-                else{
-                    ForthVal::Int(0)
-                }
-            }
-        );
-        
-        dict.insert(
-            "assert",
-            |ws|{
-                let msg = ws.pop().unwrap();
-                let a = ws.pop().unwrap();
-                if a.to_int().unwrap() > 0{
-                    ForthVal::Null
-                }
-                else{
-                    ForthVal::Err(msg.to_string())
-                }
-            }
-        );
-        
-        dict.insert("play", |ws|{
-            let result = ws.pop().unwrap();
-           match result{
-               ForthVal::Generator(gen) => {
-                   ForthVal::Int(ws.audio.push(&gen) as i64)
-               },
-               _ => {
-                   ForthVal::Err(format!("Audio channel must be generator {:?}", result))
-               }
-           } 
-        });
-        
-        
-        // Binary operations
-        // TODO surely there is some easy way to compress these
-        dict.insert_ptr("+", math::binary_op(|a, b|{b+a}, |a, b|{b+a}));
-        dict.insert_ptr("-", math::binary_op(|a, b|{b-a}, |a, b|{b-a}));
-        dict.insert_ptr("*", math::binary_op(|a, b|{b*a}, |a, b|{b*a}));
-        dict.insert_ptr("/", math::binary_op(|a, b|{b/a}, |a, b|{b/a}));
-        
-        dict.insert_ptr(">", math::binary_op(|a, b|{if b>a{1} else {0}}, |a, b|{if b>a{1.0} else {0.0}}));
-        dict.insert_ptr("<", math::binary_op(|a, b|{if b<a{1} else {0}}, |a, b|{if b<a{1.0} else {0.0}}));
-        dict.insert_ptr("%", math::binary_op(|a, b|{b%a}, |a, b|{b%a}));
-        
-        dict.insert("tofloat", |ws|{
-           ForthVal::Float(ws.pop().unwrap().to_float().unwrap()) 
-        });
-        
-        dict.insert_ptr("lshift", math::binary_op(
-                |a, b|{b<<a}, 
-                |_a, _b|{panic!("Can't rshift floats")}));
-        
-        dict.insert_ptr("rshift", math::binary_op(
-                |a, b|{b>>a}, 
-                |_a, _b|{panic!("Can't rshift floats")}));
-                
-        dict.insert_ptr("&", math::binary_op(
-                |a, b|{b&a}, 
-                |_a, _b|{panic!("Can't rshift floats")}));
-                
-        dict.insert_ptr("|", math::binary_op(
-                |a, b|{b|a}, 
-                |_a, _b|{panic!("Can't rshift floats")}));
-        
-        dict.insert("access", |ws|{
-           let id = ws.pop().unwrap().to_int().unwrap();
-           let v = ws.pop().unwrap();
-           match v{
-               ForthVal::List(collection) => {
-                   collection[id as usize].clone()
-               },
-               _ => {
-                   ForthVal::Err(format!("Invalid value for collect: {:?}", v))
-               }
-           } 
-        });
-        
-        // Dictionary operations
-        dict.insert(":",start_define);
-        // Semicolon is actualyl handled special, because it it gets close to touching
-        // function pointers
-        dict.insert(";", end_define);
-        
-        // Serial stuff
-        // may make a more unified interface
-        // But want to get it off the ground
-        dict.insert("serial_list", 
-            |_ctx|
-                {Serial::print_ports()});
-        
-        dict.insert("serial_start",
-            |ctx| {
-                let port = &ctx.pop().unwrap();
-                let baud = &ctx.pop().unwrap();
-                ctx.serial.start(port, baud)});
-                
-        dict.insert("puts",
-            |ctx|{
-                let msg = &ctx.pop().unwrap();
-                ctx.serial.put(&msg)
-            });
-            
-        dict.insert("gets",
-            |ctx|{
-                ctx.serial.get()
-            });
-        
-        dict.insert("list_to_char",
-            |ctx|{
-                let msg = &ctx.pop().unwrap();
-                let mut result = Vec::new();
-                match msg{
-                    ForthVal::List(vec) => {
-                        for v in vec{
-                            if v.to_int().unwrap() < 127{
-                                let c: char = (v.to_int().unwrap() as u8) as char;
-                                result.push(ForthVal::Str(format!("{}", c)));
-                            }
-                        }
-                        return ForthVal::List(result);
-                    },
-                    _ => ForthVal::Err(format!("Can't convert to char {:?}", msg))
-                }
-            });
-        
-        // Basic generators
-        dict.insert_generator::<Natural>("natural");
     }
     
     fn interpret_token(&mut self, v: &ForthVal) -> Result<(), ForthErr>{
@@ -474,7 +205,7 @@ impl Workspace{
                         Ok(())
                     },
                     ForthVal::Func(id) =>{
-                      let ending_id = self.ctx.dictionary.lookup["then"];
+                      let ending_id = self.ctx.dictionary.then_id();
                       if *id == ending_id{
                           self.ctx.mode = Mode::NORMAL;
                       }
@@ -499,6 +230,58 @@ impl Workspace{
                         )))
                     }
                 }  
+            },
+            Mode::ASSIGN => {
+              match v{
+                  ForthVal::Sym(s) =>{
+                      self.ctx.args.insert(s.clone(), self.ctx.definition[0].clone());
+                      self.ctx.definition.clear();
+                      self.ctx.mode = Mode::NORMAL;
+                      Ok(())
+                  },
+                  _ => {
+                      return Err(ForthErr::ErrString(
+                          format!("Invalid var name {}", v.to_string()
+                    )))
+                  }
+              }  
+            },
+            Mode::FORM => {
+                match v{
+                    ForthVal::Sym(s) => {
+                        if s == "}"{
+                            self.ctx.push(ForthVal::Form(
+                                self.ctx.form_builder.clone()
+                            ));
+                            self.ctx.form_builder.clear();
+                            self.ctx.mode = Mode::NORMAL;
+                            Ok(())
+                        }
+                        else if s.starts_with(":"){
+                            let ms = s.clone();
+                            self.ctx.form_word = ms.strip_prefix(":").unwrap().to_string();
+                            self.ctx.mode = Mode::FORM_DEFINE;
+                            Ok(())
+                        }
+                        else{
+                            return Err(ForthErr::ErrString(
+                                format!("Invalid field {:?}", v)
+                            ));
+                        }
+                    },
+                    _ => {
+                        return Err(ForthErr::ErrString(
+                         format!("Forms must contain fields, {:?}", v)   
+                        ))
+                    }
+                }
+            },
+            Mode::FORM_DEFINE => {
+                let _ = self.run(v);
+                self.ctx.mode = Mode::FORM;
+                let v = self.ctx.pop().unwrap();
+                self.ctx.define_form_field(&v);
+                Ok(())
             },
             Mode::DECLARE => {
                 // Set new word definition
@@ -546,7 +329,6 @@ impl Workspace{
                     },
                     _ => {return Err(ForthErr::ErrString(format!("Invalid file {:?}", v)));}
                 }
-            
                 Ok(())
             }
         }
@@ -649,9 +431,11 @@ impl Workspace{
             ForthVal::Sym(s) => {
                 // General symbol type
                 // This is normally a  word
-                if let Some(id) = self.ctx.dictionary.lookup.get(s){
-                    let routine = &self.ctx.dictionary.library[id];
-                    
+                if self.ctx.args.contains_key(s){
+                    self.ctx.push(self.ctx.args[s].clone());
+                    return Ok(());
+                }
+                else if let Some(routine) = self.ctx.dictionary.get_fn(s){
                     // run function
                     return self.run_routine(&routine.clone());
                 }
@@ -661,13 +445,13 @@ impl Workspace{
             },
             ForthVal::Func(f) => {
                 // This is for compiled functions
-                let routine = self.ctx.dictionary.library.get(f).unwrap();
+                let routine = self.ctx.dictionary.get_fn_from_id(f).unwrap();
                 return self.run_routine(&routine.clone());
             },
             ForthVal::Meta(m) =>{
                 // Use backtick character to get information about functions
-                if let Some(id) = self.ctx.dictionary.lookup.get(m){
-                    match &self.ctx.dictionary.library[id]{
+                if let Some(id) = self.ctx.dictionary.get_id(m){
+                    match self.ctx.dictionary.get_fn_from_id(id).unwrap(){
                         ForthRoutine::Prim(_f) => {
                             self.ctx.reply.push(ForthVal::Str(format!("Builtin function {}", m)));
                             self.ctx.reply.push(ForthVal::Str(format!("Id: {}", id)));
@@ -678,10 +462,17 @@ impl Workspace{
                         }
                     }
                 }
-                else{
-                    self.ctx.reply.push(ForthVal::Str(format!("Unknown element {}", m)));
-                }
                 self.ctx.push(val.clone());
+            },
+            ForthVal::Property((form, field)) => {
+              match &self.ctx.args[form] {
+                  ForthVal::Form(f) => {
+                      self.ctx.push(f[field].clone());
+                  },
+                  _ => {
+                      return Err(ForthErr::ErrString(format!("Invalid field {}", field)));
+                  }
+              };
             },
             ForthVal::Callable(m) => {
                 // Function pointer

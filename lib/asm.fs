@@ -44,6 +44,12 @@ x07 const r7
 \ Special
 : ecall_ b1110011 ;
 
+\ offset rs1 rd
+: jalr_ 7 lshift b1100111 + 
+    swap 15 lshift +
+    swap 20 lshift +
+    ;
+
 : write_reply_off "v" puts ;
 : write_reply_on "V" puts ;
 

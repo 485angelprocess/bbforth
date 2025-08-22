@@ -1,5 +1,5 @@
 use crate::types::{FloatOp, ForthVal, IntOp};
-use crate::context::WorkspaceContext;
+use super::WorkspaceContext;
 
 use std::rc::Rc;
 

@@ -9,6 +9,13 @@ fn to_bytes(v: &ForthVal) -> Vec<u8>{
    match v{
        ForthVal::Str(s) => s.as_bytes().to_vec(),
        ForthVal::Int(v) => (*v as u32).to_be_bytes().to_vec(),
+       ForthVal::List(mlist) => {
+        let mut result = Vec::new();
+        for lv in mlist{
+            result.append(&mut to_bytes(lv));
+        }
+        result
+       },
        _ => panic!("Can't convert {:?} to bytes", v)
    }
 }
@@ -58,7 +65,7 @@ impl Serial{
     
     pub fn put(&mut self, msg: &ForthVal) -> ForthVal{
         let bytes = to_bytes(msg);
-        //println!("Sending bytes {:?}", bytes);
+        println!("Sending bytes {:?}", bytes);
         
         if let Some(p) = &mut self.port{
             let wlen = p.write(bytes.as_slice()).expect("Write failed");

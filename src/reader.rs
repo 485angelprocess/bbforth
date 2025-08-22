@@ -58,6 +58,10 @@ fn read_atom(token: &String) -> ForthRet{
         if t.starts_with("."){
             Ok(ForthVal::Sys(t[1..].to_string()))
         }
+        else if t.contains("."){
+            let sp: Vec<&str> = t.split(".").collect();
+            Ok(ForthVal::Property((sp[0].to_string(), sp[1].to_string())))
+        }
         else if t.starts_with("`"){
             Ok(ForthVal::Meta(t[1..].to_string()))
         }

@@ -1,6 +1,6 @@
-use std::{borrow::Borrow, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::collections::HashMap;
 
-use crate::{context::{Workspace, WorkspaceContext}, types::ForthVal};
+use crate::{interpreter::{Workspace, WorkspaceContext}, types::ForthVal};
 
 /*
 Generate lazy lists

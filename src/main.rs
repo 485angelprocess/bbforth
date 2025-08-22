@@ -3,12 +3,9 @@ extern crate rustyline;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-
-
 mod reader;
 mod types;
-mod context;
-mod math;
+mod interpreter;
 mod generator;
 mod audio;
 mod drivers;
@@ -25,9 +22,7 @@ fn main(){
     }
     
     // Set up environment
-    let mut ctx = context::Workspace::new();
-    
-    ctx.setup();
+    let mut ctx = interpreter::Workspace::standard();
     
     ctx.read_file("lib/prelude.fs");
     

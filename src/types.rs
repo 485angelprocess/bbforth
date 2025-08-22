@@ -1,5 +1,5 @@
-use crate::{context::{ForthRoutine}, generator::GeneratorUnit, math};
-use std::rc::Rc;
+use crate::{interpreter::{ForthRoutine, math}, generator::GeneratorUnit};
+use std::collections::HashMap;
 
 /// Forth value
 #[derive(Clone)]
@@ -11,6 +11,8 @@ pub enum ForthVal{
     Str(String),
     List(Vec<ForthVal>),
     Generator(GeneratorUnit),
+    Form(HashMap<String, ForthVal>),
+    Property((String, String)),
     // Symbol
     Sym(String),
     // System call
@@ -77,6 +79,9 @@ impl ForthVal{
             ForthVal::Meta(v) => format!("Function {}", v),
             ForthVal::Err(e) => format!("Error: {}", e),
             ForthVal::Func(id) => format!("Function with id {}", id),
+            ForthVal::Form(fields) => {
+              format!("Form with fields {:?}", fields.keys())
+            },
             ForthVal::Generator(gen) => {
                 let mut g = gen.clone();
                 let mut v = String::new();
@@ -167,6 +172,23 @@ impl ForthVal{
             }
             _ => Err(ForthErr::ErrString(format!("Can't add {:?}, {:?}", self, other)))
         }
+    }
+    
+    pub fn to_list(&self) -> ForthVal{
+        match self{
+            ForthVal::List(_a) => self.clone(),
+            _ => ForthVal::List(vec![self.clone()])
+        }
+    }
+    
+    pub fn append(&self, other: ForthVal) -> ForthVal{
+        if let ForthVal::List(mut a) = self.to_list(){
+            if let ForthVal::List(mut b) = other.to_list(){
+                a.append(&mut b);
+                return ForthVal::List(a);
+            }
+        }
+        panic!("Can't convert to list");
     }
 }
 
