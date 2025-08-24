@@ -44,4 +44,6 @@
 "Connecting serial" .
 115200 serial_list 0 access serial_start
 
+needs lib/device/control
+
 "Ran prelude" .

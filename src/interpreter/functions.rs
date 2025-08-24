@@ -135,6 +135,16 @@ impl Workspace{
         );
         
         dict.insert(
+            "@",
+            |ws|{
+                match ws.pop().unwrap(){
+                    ForthVal::Meta(v) => ForthVal::Int(*ws.dictionary.get_id(v.as_str()).unwrap() as i64),
+                    _ => ForthVal::Err(format!("Invalid value"))
+                }
+            }
+        );
+        
+        dict.insert(
             "{",
             |ws|{
                 ws.form_builder.clear();
@@ -270,6 +280,8 @@ impl Workspace{
         dict.insert_ptr("*", math::binary_op(|a, b|{b*a}, |a, b|{b*a}));
         dict.insert_ptr("/", math::binary_op(|a, b|{b/a}, |a, b|{b/a}));
         
+        dict.insert_ptr("&", math::binary_op(|a, b|{b&a}, |a, b|{panic!("cant do bitwise on float")}));
+        
         dict.insert_ptr(">", math::binary_op(|a, b|{if b>a{1} else {0}}, |a, b|{if b>a{1.0} else {0.0}}));
         dict.insert_ptr("<", math::binary_op(|a, b|{if b<a{1} else {0}}, |a, b|{if b<a{1.0} else {0.0}}));
         dict.insert_ptr("%", math::binary_op(|a, b|{b%a}, |a, b|{b%a}));
@@ -372,6 +384,7 @@ impl Workspace{
                        for _i in 0..len{
                            result.push(gen.next())
                        }
+                       result.reverse();
                        ForthVal::List(result)
                    },
                     _ => ForthVal::Err(format!("Can only collect generator, got {:?}", gen))
@@ -411,6 +424,17 @@ impl Workspace{
                 }
                 ForthVal::List(result)
             }
+        );
+        
+        dict.insert("remove_from_list",
+            |ws|{
+                match ws.pop().unwrap(){
+                    ForthVal::List(mlist) => {
+                        ForthVal::List(mlist[1..mlist.len()].to_vec())
+                    },
+                    _ => ForthVal::Err(format!("Invalid type"))
+                }
+            }  
         );
         
         dict.insert("list_group",

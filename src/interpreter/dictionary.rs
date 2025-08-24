@@ -9,7 +9,6 @@ pub struct Dictionary{
     library: HashMap<usize, ForthRoutine>,
 
     local_lookup: HashMap<String, usize>,
-    local_library: HashMap<usize, ForthRoutine>,
     
     local: bool
 }
@@ -21,7 +20,6 @@ impl Dictionary{
             library: HashMap::new(),
             
             local_lookup: HashMap::new(),
-            local_library: HashMap::new(),
             
             local: false
         }
@@ -56,12 +54,12 @@ impl Dictionary{
         
         let (lookup, library) = match self.local{
                 false => (&mut self.lookup, &mut self.library),
-                true => (&mut self.local_lookup, &mut self.local_library)
+                true => (&mut self.local_lookup, &mut self.library)
         };
         
         let id = match lookup.get(s){
             Some(v) => v.clone(),
-            None => lookup.len()
+            None => library.len()
         };
         
         lookup.insert(s.clone(), id);
@@ -96,11 +94,6 @@ impl Dictionary{
     
     /// Get function from id code
     pub fn get_fn_from_id(&self, v: &usize) -> Option<&ForthRoutine>{
-        if self.local{
-            if let Some(f) = self.local_library.get(v){
-                return Some(f);
-            }
-        }
         self.library.get(v)
     }
 }

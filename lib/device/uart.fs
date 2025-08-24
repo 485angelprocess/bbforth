@@ -4,7 +4,6 @@ needs lib/asm
 \ andi x1, x1, 0
 \ addi x1, x1, v
 \ sw x1, 0(x0)
-: clearreg 0 swap dup andi_ ;
 : d_writechar
     "v" puts
     0 clearreg 0 writeaddr

@@ -65,7 +65,7 @@ impl Serial{
     
     pub fn put(&mut self, msg: &ForthVal) -> ForthVal{
         let bytes = to_bytes(msg);
-        println!("Sending bytes {:?}", bytes);
+        //println!("Sending bytes {:?}", bytes);
         
         if let Some(p) = &mut self.port{
             let wlen = p.write(bytes.as_slice()).expect("Write failed");

@@ -353,8 +353,6 @@ impl Workspace{
         Ok(self.ctx.reply.clone())
     }
     
-    
-    
     fn run_routine(&mut self, routine: &ForthRoutine) -> Result<(), ForthErr>{
         match routine{
             ForthRoutine::Prim(f) => {
