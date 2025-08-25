@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -15,7 +16,9 @@ use crate::audio::AudioContext;
 mod functions;
 mod dictionary;
 pub mod math;
+mod stack;
 
+use stack::Stack;
 use dictionary::*;
 use functions::*;
 
@@ -57,8 +60,8 @@ enum Namespace{
 }
 
 pub struct WorkspaceContext{
-    pub stack: Vec<ForthVal>,
-    pub reply: Vec<ForthVal>,
+    pub stack: Stack,
+    pub reply: Stack,
     
     // For declaring new words
     mode: Mode,
@@ -76,9 +79,10 @@ pub struct WorkspaceContext{
 
 impl WorkspaceContext{
     fn new() -> Self{
+        let s = Serial::new();
         Self{
-            stack: Vec::new(),
-            reply: Vec::new(),
+            stack: Stack::new(s.clone()),
+            reply: Stack::new(s.clone()),
             mode: Mode::NORMAL,
             define_word: None,
             args: HashMap::new(),
@@ -89,7 +93,7 @@ impl WorkspaceContext{
             definition: Vec::new(),
             dictionary: Dictionary::new(),
             audio: AudioContext::new(),
-            serial: Serial::new()
+            serial: s.clone()
         }
     }
     
@@ -350,7 +354,7 @@ impl Workspace{
                 }
             }
         }
-        Ok(self.ctx.reply.clone())
+        Ok(self.ctx.reply.get_local().clone())
     }
     
     fn run_routine(&mut self, routine: &ForthRoutine) -> Result<(), ForthErr>{
@@ -385,47 +389,6 @@ impl Workspace{
         // TODO make this reply more detailed
         // with like character positions
         match val{
-            ForthVal::Sys(s) => {
-                // system call
-                // May move these all to 
-                match s.as_str(){
-                    // TODO decide/check if this clears stack
-                    "" => {
-                        if let Some(v) = self.ctx.pop(){
-                            self.ctx.reply.push(v);
-                        }
-                        else{
-                            self.ctx.reply.push(ForthVal::Str("Stack empty".to_string()));
-                        }
-                    },
-                    "s" => {
-                        for i in 0..self.ctx.len(){
-                            self.ctx.reply.push(self.ctx.peek(i).unwrap().clone());
-                        }
-                    },
-                    "x" => {
-                        if let Some(v) = self.ctx.pop(){
-                            self.ctx.reply.push(ForthVal::Str(format!("{:#02x}", 
-                                v.to_int().unwrap())));
-                        }
-                        else{
-                            self.ctx.reply.push(ForthVal::Str("Stack empty".to_string()));
-                        }
-                    },
-                    "b" => {
-                        if let Some(v) = self.ctx.pop(){
-                            self.ctx.reply.push(ForthVal::Str(format!("{:#02b}", 
-                                v.to_int().unwrap())));
-                        }
-                        else{
-                            self.ctx.reply.push(ForthVal::Str("Stack empty".to_string()));
-                        }
-                    }
-                    _ => {
-                        return Err(ForthErr::ErrString(format!("Unknown special function {}", s)));
-                    }
-                }
-            },
             ForthVal::Sym(s) => {
                 // General symbol type
                 // This is normally a  word

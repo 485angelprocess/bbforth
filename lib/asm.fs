@@ -89,6 +89,9 @@ x07 const t2
 : readpc
   33 readdebug getdata ;
   
+: writepc
+  33 writedebug ;
+  
 : readreg
   readdebug getdata ;
   

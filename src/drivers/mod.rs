@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::{Arc, Mutex}, time::Duration};
 
 use serialport::SerialPort;
 
@@ -21,14 +21,17 @@ fn to_bytes(v: &ForthVal) -> Vec<u8>{
 }
 
 /// Serial port driver
+#[derive(Clone)]
 pub struct Serial{
-    port: Option<Box<dyn SerialPort>>
+    port: Arc<Mutex<Option<Box<dyn SerialPort>>>>
+    
+    // TODO set verbose flag or have history buffer
 }
 
 impl Serial{
     pub fn new() -> Self{
         Self{
-            port: None
+            port: Arc::new(Mutex::new(None))
         }
     }
     
@@ -43,6 +46,10 @@ impl Serial{
         ForthVal::List(ports)
     }
     
+    pub fn available(&self) -> bool{
+        self.port.lock().unwrap().is_some()
+    }
+    
     pub fn start(&mut self, p: &ForthVal, b: &ForthVal) -> ForthVal{
         let baud = b.to_int().unwrap() as u32;
         match p{
@@ -51,7 +58,8 @@ impl Serial{
                 let s = serialport::new(s.as_str(), baud) 
                     .timeout(Duration::from_millis(100))
                     .open();
-                self.port = match s{
+                let mut sp = self.port.lock().unwrap();
+                *sp = match s{
                     Ok(p) => Some(p),
                     Err(e) => {return ForthVal::Err(format!("{:?}", e));}
                 }
@@ -65,11 +73,12 @@ impl Serial{
     
     pub fn put(&mut self, msg: &ForthVal) -> ForthVal{
         let bytes = to_bytes(msg);
-        //println!("Sending bytes {:?}", bytes);
         
-        if let Some(p) = &mut self.port{
-            let wlen = p.write(bytes.as_slice()).expect("Write failed");
-            //println!("Wrote {} bytes", wlen);
+        if self.available(){
+            let mut sp = self.port.lock().unwrap();
+            let _wlen = (sp.as_mut())
+                    .expect("Serial port exists")
+                    .write(bytes.as_slice()).expect("Write failed");
         }
         else{
             // temp tell me the info
@@ -78,11 +87,63 @@ impl Serial{
         return ForthVal::Null;
     }
     
+    pub fn write(&mut self, addr: u32, data: u32) -> Option<usize>{
+        // TODO wait for device to finish execution
+        let mut msg = vec!['W' as u8];
+        msg.append(&mut addr.to_be_bytes().to_vec());
+        msg.append(&mut data.to_be_bytes().to_vec());
+        
+        let mut lock = self.port.lock().unwrap();
+        if let Some(sp) = lock.as_mut(){
+            println!("Wrote {} to addr {}", data, addr);
+            Some(sp.write(msg.as_slice()).expect("Write failed"))
+        }
+        else{
+            println!("Serial port not open");
+            None
+        }
+    }
+    
+    pub fn read(&mut self, addr: u32) -> Option<u32>{
+        let mut msg = vec!['R' as u8];
+        msg.append(&mut addr.to_be_bytes().to_vec());
+        
+        let mut lock = self.port.lock().unwrap();
+        if let Some(sp) = lock.as_mut(){
+            println!("Reading from address {}", addr);
+            let wlen = sp.write(msg.as_slice()).expect("Write failed");
+            if wlen == 5{
+                println!("Wrote read for address {}", addr);
+                let mut serial_buf = vec![0; 32];
+                match sp.read(serial_buf.as_mut_slice()){
+                    Ok(_rlen) => {
+                        // STUB
+                        println!("Got response {:?}", serial_buf);
+                    }
+                    Err(e) => {
+                        println!("Read error: {}", e);
+                    }
+                }
+            }
+            else{
+                println!("Request failed from serial device");
+            }
+            // Failed
+            None
+        }
+        else{
+            println!("Serial port not open");
+            None
+        }
+    }
+    
     pub fn get(&mut self) -> ForthVal{
-        if let Some(p) = &mut self.port{
+        if self.available(){
+            let mut lock = self.port.lock().unwrap();
+            
             // TODO make this is more a gets n bytes
             let mut serial_buf = vec![0; 32];
-            match p.read(serial_buf.as_mut_slice()){
+            match lock.as_mut().unwrap().read(serial_buf.as_mut_slice()){
                 Ok(rlen) => {
                     let mut resp = Vec::new();
                     for b in &mut serial_buf[0..rlen]{

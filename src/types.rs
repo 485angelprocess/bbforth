@@ -15,8 +15,6 @@ pub enum ForthVal{
     Property((String, String)),
     // Symbol
     Sym(String),
-    // System call
-    Sys(String),
     // A line
     Vector(Vec<ForthVal>),
     // For information about a function
@@ -74,7 +72,6 @@ impl ForthVal{
             ForthVal::Float(f) => format!("{:.4}", f),
             ForthVal::Str(s) => format!("'{}'", s),
             ForthVal::Sym(s) => format!("{}", s),
-            ForthVal::Sys(s) => format!(".{}", s),
             ForthVal::List(v) => format!("{:?}", v),
             ForthVal::Meta(v) => format!("Function {}", v),
             ForthVal::Err(e) => format!("Error: {}", e),
@@ -199,6 +196,5 @@ pub enum ForthErr{
     ErrForthVal(ForthVal)
 }
 
-pub type ForthArgs = Vec<ForthVal>;
 pub type ForthRet = Result<ForthVal, ForthErr>;
 

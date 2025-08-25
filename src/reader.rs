@@ -56,7 +56,7 @@ fn read_atom(token: &String) -> ForthRet{
     else{
         let t = token.to_string();
         if t.starts_with("."){
-            Ok(ForthVal::Sys(t[1..].to_string()))
+            Ok(ForthVal::Sym(t))
         }
         else if t.contains("."){
             let sp: Vec<&str> = t.split(".").collect();

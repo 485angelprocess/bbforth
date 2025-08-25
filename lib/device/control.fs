@@ -28,6 +28,8 @@ needs lib/asm
 x04 const IMM_BUFFER_ADDRESS
 
 256 const KERNEL_START
+264 const IMM_START
+32 const IMM_LOCK
 256 const MEM
 
 128 const IMM_START
@@ -37,7 +39,10 @@ x04 const IMM_BUFFER_ADDRESS
 \ Program starts here and jumps to offset
 \ This area could be used for interrupt vector
 : load_startup
-    KERNEL_START 0 1 jalr_ 0 upload_program
+    KERNEL_START 0 1 jalr_ \ init
+    IMM_START 0 1 jalr_ \ run immediate
+    0
+    upload_program
 ;
 
 \ kernel
@@ -54,7 +59,9 @@ x04 const IMM_BUFFER_ADDRESS
     MEM x0 t1 addi_
     IMM_START t1 t1 addi_
     0 t1 t2 lw_
-    x0 t1 ra jalr_ 
+    x0 t1 ra jalr_ \ go to immediate program
+    IMM_LOCK x0 t1 addi_
+    0 t1 zero sw_ \ clear imm lock
     0 \ noop
     KERNEL_START upload_program
 ;
@@ -67,6 +74,8 @@ load_kernel
     512 upload_program
     512 4 IMM_START + writeaddr \ Store number
     d_reset
+    
+    4 writepc \ Set to immediate vector table
     d_start
 ;
 
@@ -103,3 +112,5 @@ load_kernel
     0 access
     .
 ;
+
+esc

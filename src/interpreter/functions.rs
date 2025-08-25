@@ -1,8 +1,8 @@
-use std::{rc::Rc, thread, time::Duration};
+use std::{borrow::BorrowMut, rc::Rc, thread, time::Duration};
 
 use crate::{drivers::Serial, interpreter::WorkspaceContext, types::{ForthErr, ForthRet, ForthVal}};
 
-use super::{math, ForthRoutine, GenEnv, Generator, GeneratorUnit, Mode, Natural, Workspace};
+use super::{math, Dictionary, ForthRoutine, GenEnv, Generator, GeneratorUnit, Mode, Natural, Workspace};
 
 /// Duplicate top of stack
 pub fn dup(ws: &mut WorkspaceContext) -> ForthVal{
@@ -85,10 +85,55 @@ fn unwrap(ws: &mut WorkspaceContext, v: &ForthVal) -> Vec<ForthVal>{
     }
 }
 
+/// Define print functions
+fn setup_print(dict: &mut Dictionary){
+    dict.insert(".", |ws|{
+        if let Some(v) = ws.pop(){
+            ws.reply.push(v);
+        }
+        else{
+            ws.reply.push(ForthVal::Str("Stack empty".to_string()));
+        }
+        ForthVal::Null
+    });
+    
+    dict.insert(".s", |ws|{
+        for i in 0..ws.len(){
+            ws.reply.push(ws.peek(i).unwrap().clone());
+        }
+        ForthVal::Null
+    });
+    
+    dict.insert(".x", |ws|{
+        if let Some(v) = ws.pop(){
+            ws.reply.push(ForthVal::Str(format!("{:#02x}", 
+                v.to_int().unwrap())));
+        }
+        else{
+            ws.reply.push(ForthVal::Str("Stack empty".to_string()));
+        }
+        ForthVal::Null
+    });
+    
+    dict.insert(".b", |ws|{
+        if let Some(v) = ws.pop(){
+            ws.reply.push(ForthVal::Str(format!("{:#02b}", 
+                v.to_int().unwrap())));
+        }
+        else{
+            ws.reply.push(ForthVal::Str("Stack empty".to_string()));
+        }
+        ForthVal::Null
+    });
+}
+
 impl Workspace{
     /// Declare primitive functions
     pub fn setup(&mut self){
         let dict = &mut self.ctx.dictionary;
+        
+        setup_print(dict);
+    
         // Stack operations
         dict.insert(
             "dup",
@@ -168,6 +213,40 @@ impl Workspace{
             |ws|{
                 let mode = ws.pop().unwrap();
                 ws.dictionary.set_context(mode.to_int().unwrap() != 0);
+                ForthVal::Null
+            }
+        );
+        
+        dict.insert(
+            "stack_set",
+            |ws|{
+                let mode = ws.pop().unwrap();
+                let m = mode.to_int().unwrap() == 0;
+                ws.stack.local = m;
+                ForthVal::Null
+            }
+        );
+        
+        // Stall waits for a register/memory address to be 0
+        dict.insert(
+            "stall",
+            |ws|{
+                let mut checking = true;
+                let mut counter = 0;
+                let timeout = 10;
+                let addr = ws.pop().unwrap().to_int().unwrap();
+                while checking{
+                    let result = ws.serial.read(addr as u32);
+                    if let Some(r) = result{
+                        if r == 0{
+                            return ForthVal::Null;
+                        } 
+                    }
+                    counter += 1;
+                    if counter >= timeout{
+                        return ForthVal::Err(format!("Timed out while stalling for state change"));
+                    }
+                }
                 ForthVal::Null
             }
         );
