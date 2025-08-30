@@ -10,6 +10,8 @@ mod generator;
 mod audio;
 mod drivers;
 
+mod asm;
+
 use types::ForthErr;
 
 fn main(){
