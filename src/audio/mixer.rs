@@ -29,7 +29,7 @@ impl Mixer{
         
         println!("Default device {:?}", device.name().unwrap());
         
-        let mut supported_configs_range = device.supported_output_configs()
+        let supported_configs_range = device.supported_output_configs()
                             .expect("Error while querying configs");
         
         for sc in supported_configs_range{

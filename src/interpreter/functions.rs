@@ -1,6 +1,7 @@
-use std::{borrow::BorrowMut, rc::Rc, thread, time::Duration};
+use std::{rc::Rc, thread, time::Duration};
 
 use crate::{drivers::Serial, interpreter::WorkspaceContext, types::{ForthErr, ForthRet, ForthVal}};
+use crate::interpreter::alt::*;
 
 use super::{math, Dictionary, ForthRoutine, GenEnv, Generator, GeneratorUnit, Mode, Natural, Workspace};
 
@@ -20,28 +21,6 @@ pub fn generator<T: Generator + Default + 'static>(ws: &mut WorkspaceContext) ->
     };
     gu.consume(ws);
     ForthVal::Generator(gu)
-}
-
-/// Start definition
-pub fn start_define(ws: &mut WorkspaceContext) -> ForthVal{
-    match ws.mode{
-        Mode::NORMAL => {
-            ws.mode = Mode::DECLARE;
-            ForthVal::Null
-        },
-        _ => panic!("Already making definition")
-    }
-}
-
-/// End definition
-pub fn end_define(ws: &mut WorkspaceContext) -> ForthVal{
-    ws.dictionary.insert_routine(&ws.define_word.as_ref().unwrap().clone(), 
-        ForthRoutine::Compiled(
-                ws.definition.clone()
-    ));
-    ws.definition.clear();
-    ws.mode = Mode::NORMAL;
-    ForthVal::Null
 }
 
 pub fn to_int(v: &ForthVal) -> ForthRet{
@@ -127,12 +106,18 @@ fn setup_print(dict: &mut Dictionary){
     });
 }
 
+fn setup_alt(dict: &mut Dictionary){
+    dict.insert_alt_mode::<DefineWord>(":");
+    dict.insert_alt_mode::<Const>("const");
+}
+
 impl Workspace{
     /// Declare primitive functions
     pub fn setup(&mut self){
         let dict = &mut self.ctx.dictionary;
         
         setup_print(dict);
+        setup_alt(dict);
     
         // Stack operations
         dict.insert(
@@ -156,26 +141,6 @@ impl Workspace{
                 let b = ws.pop().unwrap();
                 let c = ws.pop().unwrap();
                 ForthVal::Vector(vec![a, c, b])
-            }
-        );
-        
-        dict.insert(
-            "const",
-            |ws|{
-                let v = ws.pop().unwrap().clone();
-                ws.compile(&v);
-                ws.mode = Mode::DEFINE;
-                ForthVal::Null
-            }
-        );
-        
-        dict.insert(
-            "=",
-            |ws|{
-                let v = ws.pop().unwrap().clone();
-                ws.compile(&v);
-                ws.mode = Mode::ASSIGN;
-                ForthVal::Null
             }
         );
         
@@ -397,12 +362,6 @@ impl Workspace{
                }
            } 
         });
-        
-        // Dictionary operations
-        dict.insert(":",start_define);
-        // Semicolon is actualyl handled special, because it it gets close to touching
-        // function pointers
-        dict.insert(";", end_define);
         
         // Serial stuff
         // may make a more unified interface

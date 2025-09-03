@@ -1,15 +1,13 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::cell::RefCell;
+
+use std::sync::Arc;
 
 use crate::drivers::Serial;
 use crate::generator::*;
-use crate::reader::{self};
+use crate::reader::{self, read_lines};
 use crate::types::{ForthErr, ForthVal};
-
-use std::fs::File;
-use std::io::{self, BufRead};
-use std::path::Path;
 
 use crate::audio::AudioContext;
 
@@ -17,22 +15,20 @@ mod functions;
 mod dictionary;
 pub mod math;
 mod stack;
+mod alt;
+mod mem;
 
 use stack::Stack;
 use dictionary::*;
 use functions::*;
 
+use alt::{AltCollect, AltMode};
+
 // function call
 pub type ForthFn = fn(&mut WorkspaceContext) -> ForthVal;
 pub type ForthFnGen = Rc<dyn Fn(&mut WorkspaceContext) -> ForthVal>;
 
-// The output is wrapped in a Result to allow matching on errors.
-// Returns an Iterator to the Reader of the lines of the file.
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where P: AsRef<Path>, {
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
-}
+
 
 #[derive(Clone)]
 pub enum ForthRoutine{
@@ -43,10 +39,8 @@ pub enum ForthRoutine{
 #[derive(PartialEq, Debug, Clone)]
 enum Mode{
     NORMAL,
-    DECLARE,
-    COMPILE,
+    ALT,
     NEEDS,
-    DEFINE,
     DOCUMENT,
     CONDITION,
     ASSIGN,
@@ -63,10 +57,10 @@ pub struct WorkspaceContext{
     pub stack: Stack,
     pub reply: Stack,
     
+    pub alt: Rc<RefCell<Option<AltCollect>>>,
+    
     // For declaring new words
     mode: Mode,
-    pub define_word: Option<String>,
-    pub definition: Vec<ForthVal>,
     pub args: HashMap<String, ForthVal>,
     pub form_builder: HashMap<String, ForthVal>,
     pub form_word: String,
@@ -84,13 +78,13 @@ impl WorkspaceContext{
             stack: Stack::new(s.clone()),
             reply: Stack::new(s.clone()),
             mode: Mode::NORMAL,
-            define_word: None,
             args: HashMap::new(),
+            
+            alt: Rc::new(RefCell::new(None)),
             
             form_word: String::new(),
             form_builder: HashMap::new(),
             
-            definition: Vec::new(),
             dictionary: Dictionary::new(),
             audio: AudioContext::new(),
             serial: s.clone()
@@ -122,52 +116,26 @@ impl WorkspaceContext{
         self.stack.len()
     }
     
-    /// Add to compile vector
-    pub fn compile(&mut self, v: &ForthVal){
-        match v{
-            ForthVal::Sym(s) => {
-                // Get function pointers instead of pushing strings
-                // to compiled functions
-                match s.as_str(){
-                    ";" => {let _ = end_define(self);},
-                    "(" => {self.mode = Mode::DOCUMENT;},
-                    ")" => {self.mode = Mode::COMPILE;},
-                    _ => {
-                       match self.dictionary.get_id(s){
-                        Some(id) => self.definition.push(ForthVal::Func(*id)),
-                        None => println!("Word not found {}", s)
-                       };
-                    }
-                };
-            },
-            ForthVal::Null => {},
-            _ => {
-                self.definition.push(v.clone())
-            }
-        }
-    }
-    
-    pub fn define_form_field(&mut self, value: &ForthVal){
-        let name = self.form_word.clone();
-        
-        match value{
-            ForthVal::Null => todo!("Handle invalid field name"),
-            _ => {
-                self.form_builder.insert(name, value.clone());
-            }
-        };
+    fn set_alt(&mut self, alt: AltCollect){
+        //*std::cell::RefCell::<_>::borrow_mut(&self.alt) = Some(alt);
+        *self.alt.borrow_mut() = Some(alt);
+        self.mode = Mode::ALT;
     }
 }
 
 /// Forth workspace context
 pub struct Workspace{
-    pub ctx: WorkspaceContext
+    pub ctx: WorkspaceContext,
+    alt: Rc<RefCell<Option<AltCollect>>>
 }
 
 impl Workspace{
     pub fn new() -> Self{
+        let ctx = WorkspaceContext::new();
+        let alt = ctx.alt.clone();
         Self{
-            ctx: WorkspaceContext::new()
+            ctx: ctx,
+            alt: alt
         }
     }
     
@@ -180,10 +148,7 @@ impl Workspace{
     /// Display prompt based on context
     pub fn prompt(&self) -> &str{
         match self.ctx.mode{
-            Mode::DECLARE => "dec>",
-            Mode::COMPILE => ":>",
             Mode::NEEDS => "needs>",
-            Mode::DEFINE =>  "def>",
             Mode::DOCUMENT => "doc>",
             Mode::CONDITION => "?>",
             _ => {
@@ -200,6 +165,31 @@ impl Workspace{
     fn interpret_token(&mut self, v: &ForthVal) -> Result<(), ForthErr>{
         match self.ctx.mode{
             Mode::NORMAL => self.run(v),
+            Mode::ALT => {
+                if let Some(alt) = self.alt.borrow_mut().as_mut(){
+                    let result = alt.next(&mut self.ctx, v);
+                    match result{
+                        Ok(AltMode::DONE) => {
+                            // Finish definition
+                            match alt.finish(&mut self.ctx){
+                                Err(e) => {return Err(e);},
+                                _ => ()
+                            };
+                            self.ctx.mode = Mode::NORMAL;
+                        },
+                        Err(e) => {
+                            self.ctx.mode = Mode::NORMAL;
+                            return Err(e);
+                        },
+                        _ => {
+                            ()
+                      
+                          }
+                    };
+                }
+                //self.alt.as_mut().unwrap().next(&self.ctx, v);
+                Ok(())
+            },
             Mode::CONDITION => {
                 match v{
                     ForthVal::Sym(s) =>{
@@ -221,34 +211,8 @@ impl Workspace{
                     }
                 }  
             },
-            Mode::DEFINE => {
-                match v{
-                    ForthVal::Sym(s) =>{
-                        self.ctx.define_word = Some(s.clone());
-                        end_define(&mut self.ctx);
-                        Ok(())
-                    },
-                    _ => {
-                        return Err(ForthErr::ErrString(
-                            format!("Invalid definition token {}", v.to_string()
-                        )))
-                    }
-                }  
-            },
             Mode::ASSIGN => {
-              match v{
-                  ForthVal::Sym(s) =>{
-                      self.ctx.args.insert(s.clone(), self.ctx.definition[0].clone());
-                      self.ctx.definition.clear();
-                      self.ctx.mode = Mode::NORMAL;
-                      Ok(())
-                  },
-                  _ => {
-                      return Err(ForthErr::ErrString(
-                          format!("Invalid var name {}", v.to_string()
-                    )))
-                  }
-              }  
+                todo!("Redo variables");
             },
             Mode::FORM => {
                 match v{
@@ -281,54 +245,19 @@ impl Workspace{
                 }
             },
             Mode::FORM_DEFINE => {
-                let _ = self.run(v);
-                self.ctx.mode = Mode::FORM;
-                let v = self.ctx.pop().unwrap();
-                self.ctx.define_form_field(&v);
-                Ok(())
-            },
-            Mode::DECLARE => {
-                // Set new word definition
-                match v{
-                    ForthVal::Sym(s) => {
-                        self.ctx.define_word = Some(s.clone());
-                    }
-                    _ => {
-                        return Err(ForthErr::ErrString(
-                            format!("Invalid definition token {}", v.to_string()
-                        )))
-                    }
-                }
-                
-                self.ctx.mode = Mode::COMPILE;
-                Ok(())
-            },
-            Mode::COMPILE => {
-                self.ctx.compile(v);
-                Ok(())
+                todo!("Redo forms");
             },
             Mode::DOCUMENT => {
-                // temporary ignore docuemntation
-                match v{
-                    ForthVal::Sym(s) =>{
-                        if s.as_str() == ")"{
-                            self.ctx.mode = Mode::COMPILE;
-                        }
-                    },
-                    _ => {
-                        return Err(ForthErr::ErrString(format!("Invalid document {}", v.to_string())));
-                    }
-                }
-                Ok(())  
+                todo!("Remove document field");
             },
             Mode::NEEDS => {
                 println!("Loading file {}", v.to_string());
                 self.ctx.mode = Mode::NORMAL;
                 match v{
-                    ForthVal::Sym(s) => {
+                    ForthVal::Sym(_s) => {
                         self.read_file(format!("{}.fs", v.to_string()).as_str());
                     },
-                    ForthVal::Str(s) => {
+                    ForthVal::Str(_s) => {
                         self.read_file(format!("{}", v.to_string()).as_str());
                     },
                     _ => {return Err(ForthErr::ErrString(format!("Invalid file {:?}", v)));}

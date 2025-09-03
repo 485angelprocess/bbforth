@@ -2,6 +2,9 @@ use std::{collections::HashMap, rc::Rc};
 
 use super::{generator, ForthFn, ForthFnGen, ForthRoutine, Generator};
 
+use crate::types::ForthVal;
+use crate::interpreter::alt::{AltMethod, AltCollect};
+
 #[derive(Clone)]
 pub struct Dictionary{
     // Main library
@@ -47,6 +50,17 @@ impl Dictionary{
     /// Insert generator object
     pub fn insert_generator<T: Generator + Default + 'static>(&mut self, s: &str) -> usize{
         self.insert_routine(&s.to_string(), ForthRoutine::Prim(Rc::new(|ws| generator::<T>(ws))))
+    }
+    
+    /// Insert alt mode
+    pub fn insert_alt_mode<Method: AltMethod + Default + 'static>(&mut self, s: &str){
+        self.insert(
+            s,
+            |ws|{
+                ws.set_alt(AltCollect::new(Box::new(Method::default())));
+                ForthVal::Null
+            }
+        );
     }
     
     /// Insert routine

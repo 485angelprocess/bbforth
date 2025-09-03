@@ -1,5 +1,9 @@
 extern crate rustyline;
 
+
+use std::error::Error;
+
+use reader::read_lines;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
@@ -9,8 +13,6 @@ mod interpreter;
 mod generator;
 mod audio;
 mod drivers;
-
-mod asm;
 
 use types::ForthErr;
 
@@ -26,7 +28,7 @@ fn main(){
     // Set up environment
     let mut ctx = interpreter::Workspace::standard();
     
-    ctx.read_file("lib/prelude.fs");
+    //ctx.read_file("lib/prelude.fs");
     
     // Main loop
     loop{
