@@ -1,7 +1,11 @@
 use std::{rc::Rc, thread, time::Duration};
 
-use crate::{drivers::Serial, interpreter::WorkspaceContext, types::{ForthErr, ForthRet, ForthVal}};
+use crate::{drivers::Serial, interpreter::WorkspaceContext, types::{ForthErr, ForthRet, ForthVal, AsmPromise}};
 use crate::interpreter::alt::*;
+use crate::drivers::DeviceInterface;
+use crate::interpreter::mem::Location;
+
+use crate::visual::decode;
 
 use super::{math, Dictionary, ForthRoutine, GenEnv, Generator, GeneratorUnit, Mode, Natural, Workspace};
 
@@ -109,6 +113,9 @@ fn setup_print(dict: &mut Dictionary){
 fn setup_alt(dict: &mut Dictionary){
     dict.insert_alt_mode::<DefineWord>(":");
     dict.insert_alt_mode::<Const>("const");
+    dict.insert_alt_mode::<ProcBuilder>("{");
+    dict.insert_alt_mode::<Var>("=");
+    dict.insert_alt_mode::<ClientVar>("#=");
 }
 
 impl Workspace{
@@ -143,36 +150,7 @@ impl Workspace{
                 ForthVal::Vector(vec![a, c, b])
             }
         );
-        
-        dict.insert(
-            "@",
-            |ws|{
-                match ws.pop().unwrap(){
-                    ForthVal::Meta(v) => ForthVal::Int(*ws.dictionary.get_id(v.as_str()).unwrap() as i64),
-                    _ => ForthVal::Err(format!("Invalid value"))
-                }
-            }
-        );
-        
-        dict.insert(
-            "{",
-            |ws|{
-                ws.form_builder.clear();
-                ws.mode = Mode::FORM;
-                ForthVal::Null
-            }
-        );
-        
-        dict.insert(
-            "}",
-            |ws|{
-                ws.mode = Mode::NORMAL;
-                ForthVal::Form(
-                    ws.form_builder.clone()
-                )   
-            }
-        );
-        
+                
         dict.insert(
             "library_set",
             |ws|{
@@ -196,13 +174,13 @@ impl Workspace{
         dict.insert(
             "stall",
             |ws|{
-                let mut checking = true;
+                let checking = true;
                 let mut counter = 0;
                 let timeout = 10;
                 let addr = ws.pop().unwrap().to_int().unwrap();
                 while checking{
                     let result = ws.serial.read(addr as u32);
-                    if let Some(r) = result{
+                    if let Ok(r) = result{
                         if r == 0{
                             return ForthVal::Null;
                         } 
@@ -213,24 +191,6 @@ impl Workspace{
                     }
                 }
                 ForthVal::Null
-            }
-        );
-        
-        dict.insert(
-            "remove",
-            |ws|{
-                let v = ws.pop().unwrap().clone();
-                match v{
-                    ForthVal::Meta(m) => {
-                        if ws.args.contains_key(&m){
-                            ws.args.remove(&m);
-                        }
-                        ForthVal::Null
-                    },
-                    _ => {
-                        ForthVal::Null
-                    }
-                }
             }
         );
         
@@ -324,7 +284,7 @@ impl Workspace{
         dict.insert_ptr("*", math::binary_op(|a, b|{b*a}, |a, b|{b*a}));
         dict.insert_ptr("/", math::binary_op(|a, b|{b/a}, |a, b|{b/a}));
         
-        dict.insert_ptr("&", math::binary_op(|a, b|{b&a}, |a, b|{panic!("cant do bitwise on float")}));
+        dict.insert_ptr("&", math::binary_op(|a, b|{b&a}, |_a, _b|{panic!("cant do bitwise on float")}));
         
         dict.insert_ptr(">", math::binary_op(|a, b|{if b>a{1} else {0}}, |a, b|{if b>a{1.0} else {0.0}}));
         dict.insert_ptr("<", math::binary_op(|a, b|{if b<a{1} else {0}}, |a, b|{if b<a{1.0} else {0.0}}));
@@ -412,6 +372,18 @@ impl Workspace{
             }
         );
         
+        dict.insert("write_bin",
+            |ws|{
+                if let ForthVal::Str(filename) = ws.pop().unwrap(){
+                    let _result = ws.mem.to_bin(&filename);
+                    return ForthVal::Null;
+                }
+                else{
+                    return ForthVal::Err(format!("Invalid data type"));
+                }
+            }  
+        );
+        
         dict.insert("collect",
             |ws|{
                let gen = ws.pop().unwrap();
@@ -460,6 +432,7 @@ impl Workspace{
                 for _i in 0..ws.len(){
                     result.push(ws.pop().unwrap());
                 }
+                result.reverse();
                 ForthVal::List(result)
             }
         );
@@ -495,6 +468,132 @@ impl Workspace{
                 let mlist = ws.pop().unwrap();
                 ForthVal::Vector(unwrap(ws, &mlist))
             }  
+        );
+        
+        dict.insert("read",
+            |ws|{
+                if let Some(addr) = ws.pop(){
+                    let addr = addr.to_int().unwrap();
+                    let result = ws.device.borrow_mut().read(addr as u32);
+                    if let Ok(data) = result{
+                        ForthVal::Int(data as i64)
+                    }
+                    else{
+                        ForthVal::Err("Could not read addr".to_string())
+                    }
+                }
+                else{
+                    ForthVal::Err("Stack empty".to_string())
+                }
+            }
+        );
+        
+        dict.insert("write",
+            |ws|{
+                let mut addr = ws.pop().unwrap().to_int().unwrap() as u32;
+                let data = ws.pop().unwrap();
+                
+                match data{
+                    ForthVal::Int(v) => {
+                        let _result = ws.device.borrow_mut()
+                        .write(addr as u32, v as u32);
+                    },
+                    ForthVal::List(vals) => {
+                        for i in 0..vals.len(){
+                            let v = vals[i].to_int().unwrap();
+                            let _result = ws.device.borrow_mut().write(addr, v as u32);
+                            addr += 4;
+                        }
+                    },
+                    _ => {
+                        return ForthVal::Err(format!("Unsupported data for write {:?}", data));
+                    }
+                };
+                ForthVal::Null
+            }
+        );
+        
+        dict.insert("@", |ws|{
+            let addr = match ws.pop(){
+                Some(ForthVal::Var(loc)) => {
+                    match loc{
+                        Location::Local(a) => a,
+                        Location::Client(addr, _) => {
+                            return match ws.mem.access_client(addr as usize){
+                                Ok(v) => v,
+                                Err(v) => v
+                            };
+                        }
+                    }
+                },
+                Some(ForthVal::Int(a)) => a as usize,
+                _ => {
+                    return ForthVal::Err("Can't use as address".to_string())
+                }
+            };
+            if let Some(v) = ws.mem.access_local(addr){
+                v.clone()
+            }
+            else{
+                ForthVal::Err(format!("No variable at location {}", addr))
+            }
+        });
+        
+        dict.insert(
+            "!",
+            |ws|{
+                let addr = match ws.pop(){
+                Some(ForthVal::Var(loc)) => {
+                    match loc{
+                        Location::Local(a) => a,
+                        Location::Client(addr, _) => {
+                            addr as usize
+                        }
+                    }
+                },
+                Some(ForthVal::Int(a)) => a as usize,
+                _ => {
+                    return ForthVal::Err("Can't use as address".to_string())
+                }
+            };
+            return ForthVal::Int(addr as i64);
+            }
+        );
+        
+        dict.insert(
+            "jal%",
+            |ws|{
+                if let Some(ForthVal::Int(rd)) = ws.pop(){
+                    if let Some(ForthVal::Meta(name)) = ws.pop(){
+                        return ForthVal::Promise((name, AsmPromise::JAL(rd as u32)));
+                    }
+                }
+                return ForthVal::Err(format!("Invalid arguments"));
+            }
+        );
+        
+        dict.insert(
+            "decode",
+            |ws|{
+                if let Some(v) = ws.pop(){
+                    match v{
+                        ForthVal::Int(v) => {
+                            if let Some(d) = decode(v as u32){
+                                return ForthVal::Str(d);
+                            }
+                            else{
+                                return ForthVal::Err(format!("Not valid riscv instruction"))
+                            }
+                        },
+                        _ => {
+                            return ForthVal::Err(format!("Not valid type for decode {:?}", v))
+                        }
+                    }
+                }
+                else{
+                    return ForthVal::Err(format!("Stack empty"))
+                }
+            }
         );
         
         // Basic generators

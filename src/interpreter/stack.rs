@@ -1,4 +1,5 @@
 use crate::{drivers::Serial, types::ForthVal};
+use crate::drivers::DeviceInterface;
 
 #[derive(Clone)]
 struct Reg{
@@ -66,8 +67,8 @@ impl Stack{
                 self.reg.offset -= 4;
                 println!("Reading");
                 return match self.serial.read(self.reg.base+self.reg.offset){
-                    Some(v) => Some(ForthVal::Int(v as i64)),
-                    None => None
+                    Ok(v) => Some(ForthVal::Int(v as i64)),
+                    Err(_) => None
                 };
             }
             else{

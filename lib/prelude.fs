@@ -41,6 +41,9 @@
 : writedata writeaddr read_delay getdata ;
 : readdata readaddr getdata ;
 
+: wm MemoryAddress + write ;
+: rm MemoryAddress + read ;
+
 "Connecting serial" .
 115200 serial_list 0 access serial_start
 

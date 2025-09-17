@@ -1,13 +1,11 @@
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use std::sync::Arc;
-
-use crate::drivers::Serial;
 use crate::generator::*;
 use crate::reader::{self, read_lines};
 use crate::types::{ForthErr, ForthVal};
+
+use crate::drivers::{Serial, RiscMock, DeviceInterface};
 
 use crate::audio::AudioContext;
 
@@ -16,13 +14,16 @@ mod dictionary;
 pub mod math;
 mod stack;
 mod alt;
-mod mem;
+pub mod mem;
 
 use stack::Stack;
 use dictionary::*;
 use functions::*;
 
 use alt::{AltCollect, AltMode};
+use mem::VariableMemory;
+
+use crate::reg;
 
 // function call
 pub type ForthFn = fn(&mut WorkspaceContext) -> ForthVal;
@@ -41,11 +42,7 @@ enum Mode{
     NORMAL,
     ALT,
     NEEDS,
-    DOCUMENT,
     CONDITION,
-    ASSIGN,
-    FORM,
-    FORM_DEFINE
 }
 
 enum Namespace{
@@ -61,38 +58,39 @@ pub struct WorkspaceContext{
     
     // For declaring new words
     mode: Mode,
-    pub args: HashMap<String, ForthVal>,
-    pub form_builder: HashMap<String, ForthVal>,
-    pub form_word: String,
+    pub mem: VariableMemory, // TODO make this more better :)
     pub dictionary: Dictionary,
     
     pub audio: AudioContext,
     
+    pub device: Rc<RefCell<dyn DeviceInterface>>,
     pub serial: Serial,
 }
 
 impl WorkspaceContext{
     fn new() -> Self{
         let s = Serial::new();
+        let device = Rc::new(RefCell::new(RiscMock::new()));
         Self{
             stack: Stack::new(s.clone()),
             reply: Stack::new(s.clone()),
             mode: Mode::NORMAL,
-            args: HashMap::new(),
             
+            mem: VariableMemory::new(device.clone(), reg::HEAP as u32),
             alt: Rc::new(RefCell::new(None)),
-            
-            form_word: String::new(),
-            form_builder: HashMap::new(),
             
             dictionary: Dictionary::new(),
             audio: AudioContext::new(),
+            device: device.clone(),
             serial: s.clone()
         }
     }
     
     /// push value to stack
     pub fn push(&mut self, v: ForthVal){
+        if let ForthVal::Null = v{
+            return;
+        }
         self.stack.push(v);
     }
     
@@ -149,7 +147,6 @@ impl Workspace{
     pub fn prompt(&self) -> &str{
         match self.ctx.mode{
             Mode::NEEDS => "needs>",
-            Mode::DOCUMENT => "doc>",
             Mode::CONDITION => "?>",
             _ => {
                 if self.ctx.dictionary.is_local(){
@@ -210,45 +207,6 @@ impl Workspace{
                         Ok(())
                     }
                 }  
-            },
-            Mode::ASSIGN => {
-                todo!("Redo variables");
-            },
-            Mode::FORM => {
-                match v{
-                    ForthVal::Sym(s) => {
-                        if s == "}"{
-                            self.ctx.push(ForthVal::Form(
-                                self.ctx.form_builder.clone()
-                            ));
-                            self.ctx.form_builder.clear();
-                            self.ctx.mode = Mode::NORMAL;
-                            Ok(())
-                        }
-                        else if s.starts_with(":"){
-                            let ms = s.clone();
-                            self.ctx.form_word = ms.strip_prefix(":").unwrap().to_string();
-                            self.ctx.mode = Mode::FORM_DEFINE;
-                            Ok(())
-                        }
-                        else{
-                            return Err(ForthErr::ErrString(
-                                format!("Invalid field {:?}", v)
-                            ));
-                        }
-                    },
-                    _ => {
-                        return Err(ForthErr::ErrString(
-                         format!("Forms must contain fields, {:?}", v)   
-                        ))
-                    }
-                }
-            },
-            Mode::FORM_DEFINE => {
-                todo!("Redo forms");
-            },
-            Mode::DOCUMENT => {
-                todo!("Remove document field");
             },
             Mode::NEEDS => {
                 println!("Loading file {}", v.to_string());
@@ -321,9 +279,9 @@ impl Workspace{
             ForthVal::Sym(s) => {
                 // General symbol type
                 // This is normally a  word
-                if self.ctx.args.contains_key(s){
-                    self.ctx.push(self.ctx.args[s].clone());
-                    return Ok(());
+                if let Some(var) = self.ctx.mem.get(s){
+                    self.ctx.push(var);
+                    return Ok(())
                 }
                 else if let Some(routine) = self.ctx.dictionary.get_fn(s){
                     // run function
@@ -355,14 +313,7 @@ impl Workspace{
                 self.ctx.push(val.clone());
             },
             ForthVal::Property((form, field)) => {
-              match &self.ctx.args[form] {
-                  ForthVal::Form(f) => {
-                      self.ctx.push(f[field].clone());
-                  },
-                  _ => {
-                      return Err(ForthErr::ErrString(format!("Invalid field {}", field)));
-                  }
-              };
+              todo!("Property is not implemented");
             },
             ForthVal::Callable(m) => {
                 // Function pointer

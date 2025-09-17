@@ -1,5 +1,12 @@
 use crate::{interpreter::{ForthRoutine, math}, generator::GeneratorUnit};
-use std::collections::HashMap;
+use crate::proc::Proc;
+
+use crate::interpreter::mem::Location;
+
+#[derive(Clone)]
+pub enum AsmPromise{
+    JAL(u32) // destination register
+}
 
 /// Forth value
 #[derive(Clone)]
@@ -11,8 +18,10 @@ pub enum ForthVal{
     Str(String),
     List(Vec<ForthVal>),
     Generator(GeneratorUnit),
-    Form(HashMap<String, ForthVal>),
+    Form(Proc),
     Property((String, String)),
+    Var(Location),
+    Promise((String, AsmPromise)),
     // Symbol
     Sym(String),
     // A line
@@ -76,8 +85,19 @@ impl ForthVal{
             ForthVal::Meta(v) => format!("Function {}", v),
             ForthVal::Err(e) => format!("Error: {}", e),
             ForthVal::Func(id) => format!("Function with id {}", id),
-            ForthVal::Form(fields) => {
-              format!("Form with fields {:?}", fields.keys())
+            ForthVal::Promise((name, promise)) => {
+                match promise{
+                    AsmPromise::JAL(rd) => format!("JAL -> ({}) (x{})", name, rd)
+                }
+            }
+            ForthVal::Form(_proc) => {
+              format!("Process")
+            },
+            ForthVal::Var(loc) => {
+                match loc{
+                    Location::Local(a) => format!("Var at local address {}", a),
+                    Location::Client(a, s) => format!("Var at client at address {}, with size {}", a, s)
+                }  
             },
             ForthVal::Generator(gen) => {
                 let mut g = gen.clone();
@@ -91,6 +111,10 @@ impl ForthVal{
             }
             _ => format!("Can't print")
         }
+    }
+    
+    pub fn size(&self) -> usize{
+        1 // STUB
     }
     
     pub fn to_int(&self) -> Result<i64, ForthErr>{
